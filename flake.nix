@@ -32,6 +32,7 @@
               fd
               fzf
               go-task
+              git
             ];
           };
 
