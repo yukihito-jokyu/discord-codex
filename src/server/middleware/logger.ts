@@ -8,7 +8,7 @@ export const logger: MiddlewareHandler = async (c, next) => {
   const { method } = c.req;
   const path = c.req.path;
 
-  console.log(`[START] id=${requestId} ${method} ${path} → ${c.res.status} `);
+  console.log(`[START] id=${requestId} ${method} ${path}`);
 
   await next();
 
