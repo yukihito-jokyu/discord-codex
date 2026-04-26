@@ -1,0 +1,31 @@
+{
+  "name": "discord-codex",
+  "version": "1.0.0",
+  "description": "Discord bot powered by Codex SDK",
+  "main": "dist/index.js",
+  "type": "module",
+  "scripts": {
+    "build": "tsc",
+    "dev": "tsc --watch",
+    "lint": "eslint src/",
+    "fmt": "prettier --write src/",
+    "check": "tsc --noEmit",
+    "clean": "rm -rf dist"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "packageManager": "pnpm@10.33.0",
+  "dependencies": {
+    "@chat-adapter/discord": "^4.26.0",
+    "@chat-adapter/state-memory": "^4.26.0",
+    "@openai/codex-sdk": "^0.125.0"
+  },
+  "devDependencies": {
+    "@types/node": "^25.6.0",
+    "eslint": "^10.2.1",
+    "eslint-config-prettier": "^10.1.8",
+    "prettier": "^3.8.3",
+    "typescript": "^6.0.3"
+  }
+}
