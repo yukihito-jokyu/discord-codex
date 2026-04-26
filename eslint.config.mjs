@@ -1,4 +1,3 @@
-import eslint from "eslint";
 import prettier from "eslint-config-prettier";
 
 export default [
