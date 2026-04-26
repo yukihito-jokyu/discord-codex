@@ -2,7 +2,6 @@ name: バックエンド実装タスク
 description: 新しい機能や既存機能の改善を行うためのタスク
 labels: ["backend"]
 body:
-
   - type: textarea
     id: description
     attributes:

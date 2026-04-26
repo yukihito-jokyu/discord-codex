@@ -2,7 +2,6 @@ name: フロントエンド実装タスク
 description: 新しい機能・画面や既存機能・画面の改善を行うためのタスク
 labels: ["frontend"]
 body:
-
   - type: textarea
     id: description
     attributes:
