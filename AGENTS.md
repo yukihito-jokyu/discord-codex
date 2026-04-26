@@ -32,3 +32,23 @@ nix develop --command <command>
 ```bash
 nix develop --command nix fmt
 ```
+
+## プロジェクト共通ルール
+
+### TypeScript / ESM
+
+- `"type": "module"` のESMプロジェクト。`tsconfig.json`で`strict: true`。
+- `moduleResolution: "Node16"` のため、**相対importには`.js`拡張子が必須**（例: `import { foo } from "./bar.js"`）。
+
+### 主要スクリプト
+
+| スクリプト   | 用途                 | 実行例                             |
+| ------------ | -------------------- | ---------------------------------- |
+| `pnpm check` | 型検査（noEmit）     | `nix develop --command pnpm check` |
+| `pnpm build` | ビルド               | `nix develop --command pnpm build` |
+| `pnpm fmt`   | Prettierフォーマット | `nix develop --command pnpm fmt`   |
+| `pnpm dev`   | 開発サーバー起動     | `nix develop --command pnpm dev`   |
+
+### 設定
+
+アプリ設定は `src/app/config/config.yaml` にYAML形式で定義し、`BotConfig`インターフェースで型付けする。

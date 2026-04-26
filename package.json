@@ -6,7 +6,7 @@
   "type": "module",
   "scripts": {
     "build": "tsc",
-    "dev": "tsc --watch",
+    "dev": "tsx watch src/index.ts",
     "lint": "eslint src/",
     "fmt": "prettier --write src/",
     "check": "tsc --noEmit",
@@ -19,19 +19,22 @@
   "dependencies": {
     "@chat-adapter/discord": "^4.26.0",
     "@chat-adapter/state-memory": "^4.26.0",
+    "@hono/node-server": "^2.0.0",
     "@noble/ed25519": "^3.1.0",
     "@openai/codex-sdk": "^0.125.0",
     "discord-api-types": "^0.38.47",
     "discord.js": "^14.26.3",
     "hono": "^4.12.15",
     "redis": "^5.12.1",
-    "yaml": "^2.8.3"
+    "yaml": "^2.8.3",
+    "zod": "^4.3.6"
   },
   "devDependencies": {
     "@types/node": "^25.6.0",
     "eslint": "^10.2.1",
     "eslint-config-prettier": "^10.1.8",
     "prettier": "^3.8.3",
+    "tsx": "^4.21.0",
     "typescript": "^6.0.3"
   }
 }

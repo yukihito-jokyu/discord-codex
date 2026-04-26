@@ -1,0 +1,7 @@
+bot:
+  defaultModel: "codex-mini"
+  maxTokens: 4096
+  timeoutMs: 30000
+
+server:
+  port: 3000
