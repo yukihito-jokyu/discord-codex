@@ -1,0 +1,32 @@
+version: "3"
+
+tasks:
+  build:
+    desc: Build TypeScript
+    cmds:
+      - nix develop --command pnpm exec tsc
+
+  dev:
+    desc: Run in development mode
+    cmds:
+      - nix develop --command pnpm exec tsc --watch
+
+  lint:
+    desc: Run ESLint
+    cmds:
+      - nix develop --command pnpm exec eslint src/
+
+  fmt:
+    desc: Format code with Prettier
+    cmds:
+      - nix develop --command pnpm exec prettier --write src/
+
+  check:
+    desc: Type check without emitting
+    cmds:
+      - nix develop --command pnpm exec tsc --noEmit
+
+  clean:
+    desc: Remove build artifacts
+    cmds:
+      - rm -rf dist

@@ -2,7 +2,6 @@ name: 🚀 機能の提案 / Feature Request
 description: 新しい機能のアイデアや、既存機能の改善案を提案します。
 labels: ["feature"]
 body:
-
   - type: textarea
     id: summary
     attributes:
