@@ -33,6 +33,7 @@
               fzf
               go-task
               git
+              redis
             ];
           };
 
