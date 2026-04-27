@@ -2,6 +2,16 @@ import { readFileSync } from "node:fs";
 import YAML from "yaml";
 import { z } from "zod";
 
+export const logLevelSchema = z.enum([
+  "fatal",
+  "error",
+  "warn",
+  "info",
+  "debug",
+  "trace",
+  "silent",
+]);
+
 export const botConfigSchema = z.object({
   bot: z.object({
     defaultModel: z.string().min(1),
@@ -11,6 +21,11 @@ export const botConfigSchema = z.object({
   server: z.object({
     port: z.number().int().min(1),
   }),
+  logging: z
+    .object({
+      level: logLevelSchema.optional(),
+    })
+    .optional(),
 });
 
 export type BotConfig = z.infer<typeof botConfigSchema>;

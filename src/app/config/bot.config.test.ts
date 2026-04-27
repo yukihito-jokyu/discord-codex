@@ -129,6 +129,79 @@ describe("botConfigSchema invalid server fields", () => {
   });
 });
 
+describe("botConfigSchema logging valid", () => {
+  it("accepts config without logging section", () => {
+    const result = botConfigSchema.parse({
+      bot: { defaultModel: "codex-mini", maxTokens: 4096, timeoutMs: 30000 },
+      server: { port: 3000 },
+    });
+
+    expect(result).not.toHaveProperty("logging");
+  });
+
+  it.each([
+    "fatal",
+    "error",
+    "warn",
+    "info",
+    "debug",
+    "trace",
+    "silent",
+  ])("accepts logging with valid level %s", (level) => {
+    const result = botConfigSchema.parse({
+      bot: {
+        defaultModel: "codex-mini",
+        maxTokens: 4096,
+        timeoutMs: 30000,
+      },
+      server: { port: 3000 },
+      logging: { level },
+    });
+
+    expect(result.logging?.level).toBe(level);
+  });
+
+  it("accepts logging without level", () => {
+    const result = botConfigSchema.parse({
+      bot: { defaultModel: "codex-mini", maxTokens: 4096, timeoutMs: 30000 },
+      server: { port: 3000 },
+      logging: {},
+    });
+
+    expect(result.logging).toEqual({});
+  });
+});
+
+describe("botConfigSchema logging invalid", () => {
+  it("rejects invalid log level string", () => {
+    expect(() =>
+      botConfigSchema.parse({
+        bot: {
+          defaultModel: "codex-mini",
+          maxTokens: 4096,
+          timeoutMs: 30000,
+        },
+        server: { port: 3000 },
+        logging: { level: "verbose" },
+      }),
+    ).toThrow();
+  });
+
+  it("rejects non-string log level", () => {
+    expect(() =>
+      botConfigSchema.parse({
+        bot: {
+          defaultModel: "codex-mini",
+          maxTokens: 4096,
+          timeoutMs: 30000,
+        },
+        server: { port: 3000 },
+        logging: { level: 123 },
+      }),
+    ).toThrow();
+  });
+});
+
 async function setupLoadConfig(mockValue: string) {
   const { readFileSync } = await import("node:fs");
   vi.mocked(readFileSync).mockReturnValue(mockValue);
