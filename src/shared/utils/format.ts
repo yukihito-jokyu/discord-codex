@@ -5,5 +5,5 @@ const OMISSION_NOTICE = "\n\n... (続きは省略されました)";
 
 export function formatForDiscord(text: string): string {
   if (text.length <= DISCORD_MAX_LENGTH) return text;
-  return `${text.slice(0, DISCORD_MAX_LENGTH - 50)}${OMISSION_NOTICE}`;
+  return `${text.slice(0, DISCORD_MAX_LENGTH - OMISSION_NOTICE.length)}${OMISSION_NOTICE}`;
 }
