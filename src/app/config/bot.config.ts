@@ -4,12 +4,12 @@ import { z } from "zod";
 
 export const botConfigSchema = z.object({
   bot: z.object({
-    defaultModel: z.string(),
-    maxTokens: z.number(),
-    timeoutMs: z.number(),
+    defaultModel: z.string().min(1),
+    maxTokens: z.number().int().min(0),
+    timeoutMs: z.number().int().min(0),
   }),
   server: z.object({
-    port: z.number(),
+    port: z.number().int().min(1),
   }),
 });
 
