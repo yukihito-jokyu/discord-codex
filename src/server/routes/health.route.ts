@@ -1,13 +1,14 @@
 import { Hono } from "hono";
+import { HTTP_OK, HTTP_SERVICE_UNAVAILABLE } from "@/shared/utils/http-status";
 
 const health = new Hono();
 
-async function checkHealth(): Promise<Record<string, boolean>> {
+function checkHealth(): Record<string, boolean> {
   return { server: true };
 }
 
-health.get("/", async (c) => {
-  const services = await checkHealth();
+health.get("/", (c) => {
+  const services = checkHealth();
   const allHealthy = Object.values(services).every(Boolean);
   return c.json(
     {
@@ -15,8 +16,8 @@ health.get("/", async (c) => {
       services,
       timestamp: new Date().toISOString(),
     },
-    allHealthy ? 200 : 503,
+    allHealthy ? HTTP_OK : HTTP_SERVICE_UNAVAILABLE,
   );
 });
 
-export default health;
+export { health };
