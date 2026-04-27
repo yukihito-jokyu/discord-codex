@@ -34,13 +34,14 @@
               go-task
               git
               redis
+              lefthook
             ];
           };
 
           treefmt = {
             programs.nixfmt.enable = pkgs.lib.meta.availableOn pkgs.stdenv.buildPlatform pkgs.nixfmt-rfc-style.compiler;
             programs.nixfmt.package = pkgs.nixfmt-rfc-style;
-            programs.prettier.enable = true;
+            programs.biome.enable = true;
           };
         };
     };

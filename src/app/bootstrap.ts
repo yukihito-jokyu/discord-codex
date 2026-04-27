@@ -1,7 +1,7 @@
-import { createApp } from "../server/hono.js";
-import { loadConfig } from "./config/bot.config.js";
+import { loadConfig } from "@/app/config/bot.config";
+import { createApp } from "@/server/hono";
 
-export async function bootstrap() {
+export function bootstrap() {
   const config = loadConfig();
 
   const app = createApp();

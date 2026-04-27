@@ -1,0 +1,21 @@
+min_version: 1.7.0
+
+skip_output:
+  - meta
+
+pre-commit:
+  parallel: true
+  commands:
+    format:
+      tags: formatter
+      glob: "*.{ts,js}"
+      run: >
+        nix develop --command pnpm exec biome format --write --no-errors-on-unmatched {staged_files}
+      stage_fixed: true
+
+    lint:
+      tags: linter
+      glob: "*.{ts,js}"
+      run: >
+        nix develop --command pnpm exec biome lint --write --no-errors-on-unmatched {staged_files}
+      stage_fixed: true

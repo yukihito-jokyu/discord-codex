@@ -1,6 +1,6 @@
 import { Hono } from "hono";
-import { logger } from "./middleware/logger.js";
-import health from "./routes/health.route.js";
+import { logger } from "@/server/middleware/logger";
+import { health } from "@/server/routes/health.route";
 
 export function createApp() {
   const app = new Hono();

@@ -24,13 +24,27 @@ nix develop --command <command>
 | `fd`           | 高速find                 | `nix develop --command fd '.ts$' src/`              |
 | `fzf`          | ファジーファインダー     | `nix develop --command fzf`                         |
 | `task`         | タスクランナー (go-task) | `nix develop --command task build`                  |
+| `biome`        | Linter / Formatter       | `nix develop --command pnpm exec biome check ./src` |
+| `lefthook`     | Git Hooks管理            | `nix develop --command lefthook install`            |
 
 ### フォーマッタ
 
-`nix fmt` でコードフォーマットを一括適用できます（nixfmt + prettier）。
+`nix fmt` でコードフォーマットを一括適用できます（nixfmt + Biome）。
 
 ```bash
 nix develop --command nix fmt
+```
+
+### Git Hooks (Lefthook)
+
+pre-commitフックが自動的にBiomeのフォーマットとリントをステージ済みファイルに実行します。
+
+```bash
+# フックのインストール
+nix develop --command lefthook install
+
+# フックの手動実行（テスト用）
+nix develop --command lefthook run pre-commit
 ```
 
 ## プロジェクト共通ルール
@@ -38,16 +52,18 @@ nix develop --command nix fmt
 ### TypeScript / ESM
 
 - `"type": "module"` のESMプロジェクト。`tsconfig.json`で`strict: true`。
-- `moduleResolution: "Node16"` のため、**相対importには`.js`拡張子が必須**（例: `import { foo } from "./bar.js"`）。
+- `moduleResolution: "bundler"` のため、**importに拡張子は不要**。
+- パスエイリアス `@/*` → `src/*` を使用（例: `import { foo } from "@/app/foo"`）。
 
 ### 主要スクリプト
 
-| スクリプト   | 用途                 | 実行例                             |
-| ------------ | -------------------- | ---------------------------------- |
-| `pnpm check` | 型検査（noEmit）     | `nix develop --command pnpm check` |
-| `pnpm build` | ビルド               | `nix develop --command pnpm build` |
-| `pnpm fmt`   | Prettierフォーマット | `nix develop --command pnpm fmt`   |
-| `pnpm dev`   | 開発サーバー起動     | `nix develop --command pnpm dev`   |
+| スクリプト   | 用途                       | 実行例                             |
+| ------------ | -------------------------- | ---------------------------------- |
+| `pnpm check` | Biomeチェック + 型検査     | `nix develop --command pnpm check` |
+| `pnpm build` | esbuildバンドル            | `nix develop --command pnpm build` |
+| `pnpm fmt`   | Biomeフォーマット          | `nix develop --command pnpm fmt`   |
+| `pnpm lint`  | Biomeリント                | `nix develop --command pnpm lint`  |
+| `pnpm dev`   | 開発サーバー起動           | `nix develop --command pnpm dev`   |
 
 ### 設定
 

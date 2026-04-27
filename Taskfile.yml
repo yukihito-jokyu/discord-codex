@@ -2,31 +2,42 @@ version: "3"
 
 tasks:
   build:
-    desc: Build TypeScript
+    desc: Build with esbuild
     cmds:
-      - nix develop --command pnpm exec tsc
+      - nix develop --command pnpm exec esbuild src/index.ts --bundle --platform=node --format=esm --outdir=dist
 
   dev:
     desc: Run in development mode
     cmds:
-      - nix develop --command pnpm exec tsc --watch
+      - nix develop --command pnpm exec tsx watch src/index.ts
 
   lint:
-    desc: Run ESLint
+    desc: Run Biome lint
     cmds:
-      - nix develop --command pnpm exec eslint src/
+      - nix develop --command pnpm exec biome lint ./src
 
   fmt:
-    desc: Format code with Prettier
+    desc: Format code with Biome
     cmds:
-      - nix develop --command pnpm exec prettier --write src/
+      - nix develop --command pnpm exec biome format --write ./src
 
   check:
-    desc: Type check without emitting
+    desc: Run Biome check and TypeScript type check
     cmds:
+      - nix develop --command pnpm exec biome check ./src
       - nix develop --command pnpm exec tsc --noEmit
 
   clean:
     desc: Remove build artifacts
     cmds:
       - rm -rf dist
+
+  hooks:install:
+    desc: Install git hooks via lefthook
+    cmds:
+      - nix develop --command lefthook install
+
+  hooks:run:
+    desc: Run pre-commit hooks manually
+    cmds:
+      - nix develop --command lefthook run pre-commit
