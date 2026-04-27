@@ -1,23 +1,30 @@
 import { Hono } from "hono";
+import type { ContentfulStatusCode } from "hono/utils/http-status";
 import { HTTP_OK, HTTP_SERVICE_UNAVAILABLE } from "@/shared/utils/http-status";
 
 const health = new Hono();
 
-function checkHealth(): Record<string, boolean> {
+export function checkHealth(): Record<string, boolean> {
   return { server: true };
 }
 
 health.get("/", (c) => {
-  const services = checkHealth();
+  const { body, status } = buildHealthResponse(checkHealth());
+  return c.json(body, status);
+});
+
+export function buildHealthResponse(services: Record<string, boolean>) {
   const allHealthy = Object.values(services).every(Boolean);
-  return c.json(
-    {
-      status: allHealthy ? "ok" : "degraded",
+  return {
+    body: {
+      status: allHealthy ? "ok" : ("degraded" as const),
       services,
       timestamp: new Date().toISOString(),
     },
-    allHealthy ? HTTP_OK : HTTP_SERVICE_UNAVAILABLE,
-  );
-});
+    status: (allHealthy
+      ? HTTP_OK
+      : HTTP_SERVICE_UNAVAILABLE) as ContentfulStatusCode,
+  };
+}
 
 export { health };
