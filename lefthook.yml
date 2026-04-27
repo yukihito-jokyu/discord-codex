@@ -8,14 +8,14 @@ pre-commit:
   commands:
     format:
       tags: formatter
-      glob: "*.{ts,js,tsx,jsx}"
+      glob: "*.{ts,js}"
       run: >
         nix develop --command pnpm exec biome format --write --no-errors-on-unmatched {staged_files}
-        && git update-index --again {staged_files}
+      stage_fixed: true
 
     lint:
       tags: linter
-      glob: "*.{ts,js,tsx,jsx}"
+      glob: "*.{ts,js}"
       run: >
         nix develop --command pnpm exec biome lint --write --no-errors-on-unmatched {staged_files}
-        && git update-index --again {staged_files}
+      stage_fixed: true
