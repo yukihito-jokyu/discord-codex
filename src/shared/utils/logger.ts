@@ -10,6 +10,8 @@ function getDefaultLevel(): LevelWithSilent {
       return "debug";
     case "test":
       return "silent";
+    default:
+      return "info";
   }
 }
 
@@ -21,7 +23,7 @@ function getTransportConfig() {
 }
 
 export type LoggerConfig = {
-  level?: string;
+  level?: LevelWithSilent;
 };
 
 let loggerInstance: pino.Logger | null = null;
