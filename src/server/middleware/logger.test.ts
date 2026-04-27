@@ -6,7 +6,7 @@ const UUID_RE =
 
 const mockLog = { info: vi.fn() };
 
-vi.mock("@/shared/utils/logger", () => ({ logger: mockLog }));
+vi.mock("@/shared/utils/logger", () => ({ getLogger: () => mockLog }));
 
 const { logger } = await import("@/server/middleware/logger");
 
