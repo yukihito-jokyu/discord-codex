@@ -68,3 +68,28 @@ nix develop --command lefthook run pre-commit
 ### 設定
 
 アプリ設定は `src/app/config/config.yaml` にYAML形式で定義し、`BotConfig`インターフェースで型付けする。
+
+### テスト
+
+#### フレームワーク・規約
+
+- テストフレームワークは **Vitest** を使用する。
+- テストファイルはソースファイルと同じディレクトリにco-locateする（例: `src/app/config/env.test.ts`）。
+- ファイル命名: `*.test.ts`。
+- テスト構造: `describe` / `it` パターン。
+
+#### テスト設計原則
+
+- 公開関数・メソッドの入出力と副作用をテストする。内部実装の詳細はテストしない。
+- 1つの `it` ブロックにつき1つの観点（正常系・異常系・境界値）。境界値テストは必ず全て実装すること。
+- アサーションは具体的な値で検証する（`toBeDefined` 等の曖昧なアサーションは避ける）。
+- エラーテストは `expect(() => fn()).toThrow()` パターンを使用する。
+- エントリーポイント（`src/index.ts`）など副作用のみのファイルはテスト対象外とする。
+
+#### モッキング戦略
+
+- 外部依存（pino、fs、Discord API等）は `vi.mock()` でモック化する。
+- `vi.mock()` はファイルトップレベルに配置する（hoistingされるため）。
+- 呼び出し回数や引数の検証には `vi.spyOn()` を使用する。
+- 各テスト前に `beforeEach` で `vi.restoreAllMocks()` を実行し、モックをリセットする。
+- テスト間でモックの状態を変更する場合は、getterベースのミュータブルオブジェクトと `vi.resetModules()` を組み合わせる。
