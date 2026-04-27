@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  HTTP_BAD_GATEWAY,
   HTTP_BAD_REQUEST,
   HTTP_FORBIDDEN,
   HTTP_INTERNAL_SERVER_ERROR,
@@ -32,6 +33,10 @@ describe("http-status", () => {
 
   it("HTTP_INTERNAL_SERVER_ERROR is 500", () => {
     expect(HTTP_INTERNAL_SERVER_ERROR).toBe(500);
+  });
+
+  it("HTTP_BAD_GATEWAY is 502", () => {
+    expect(HTTP_BAD_GATEWAY).toBe(502);
   });
 
   it("HTTP_SERVICE_UNAVAILABLE is 503", () => {
