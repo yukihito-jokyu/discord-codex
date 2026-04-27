@@ -1,0 +1,43 @@
+name: Coverage
+
+on:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  coverage:
+    name: Test + Deploy Coverage
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deploy.outputs.page_url }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: DeterminateSystems/nix-installer-action@v16
+
+      - uses: DeterminateSystems/magic-nix-cache-action@v9
+
+      - run: nix develop --command pnpm install
+        shell: bash
+
+      - run: nix develop --command pnpm test:coverage
+        shell: bash
+
+      - uses: actions/configure-pages@v5
+
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: coverage
+
+      - uses: actions/deploy-pages@v4
+        id: deploy
