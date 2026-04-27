@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 vi.mock("@/shared/utils/logger", () => ({
-  logger: { info: vi.fn() },
+  getLogger: vi.fn().mockReturnValue({ info: vi.fn() }),
 }));
 
 describe("createApp", () => {

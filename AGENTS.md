@@ -57,17 +57,81 @@ nix develop --command lefthook run pre-commit
 
 ### 主要スクリプト
 
-| スクリプト   | 用途                       | 実行例                             |
-| ------------ | -------------------------- | ---------------------------------- |
-| `pnpm check` | Biomeチェック + 型検査     | `nix develop --command pnpm check` |
-| `pnpm build` | esbuildバンドル            | `nix develop --command pnpm build` |
-| `pnpm fmt`   | Biomeフォーマット          | `nix develop --command pnpm fmt`   |
-| `pnpm lint`  | Biomeリント                | `nix develop --command pnpm lint`  |
-| `pnpm dev`   | 開発サーバー起動           | `nix develop --command pnpm dev`   |
+| スクリプト   | 用途                   | 実行例                             |
+| ------------ | ---------------------- | ---------------------------------- |
+| `pnpm check` | Biomeチェック + 型検査 | `nix develop --command pnpm check` |
+| `pnpm build` | esbuildバンドル        | `nix develop --command pnpm build` |
+| `pnpm fmt`   | Biomeフォーマット      | `nix develop --command pnpm fmt`   |
+| `pnpm lint`  | Biomeリント            | `nix develop --command pnpm lint`  |
+| `pnpm dev`   | 開発サーバー起動       | `nix develop --command pnpm dev`   |
 
 ### 設定
 
 アプリ設定は `src/app/config/config.yaml` にYAML形式で定義し、`BotConfig`インターフェースで型付けする。
+
+### ロギング
+
+ロガーは `src/shared/utils/logger.ts` でPinoベースのファクトリパターンで実装する。
+
+#### ロガーの利用
+
+- `getLogger()` でロガーインスタンスを取得する。直接 `pino` をインポートしない。
+- `import { getLogger } from "@/shared/utils/logger"` でインポートする。
+- ロガーの初期化は `bootstrap()` 内で `createLogger(config.logging)` を呼び出して行う。
+- ミドルウェア等の各モジュールでは `getLogger()` を呼び出してロガーを使用する。
+
+#### ログレベル
+
+- `config.yaml` の `logging.level` で上書き可能。
+- 未指定時は `NODE_ENV` に基づくデフォルト値を使用:
+  - `production`: `info`
+  - `development`: `debug`
+  - `test`: `silent`
+- 有効なレベル: `fatal`, `error`, `warn`, `info`, `debug`, `trace`, `silent`
+
+#### ログレベルの使い分け
+
+| レベル  | 用途                                       | 例                                                |
+| ------- | ------------------------------------------ | ------------------------------------------------- |
+| `fatal` | アプリケーションが継続不可能な致命的障害   | Discordトークン不正で起動失敗、必須設定の欠落     |
+| `error` | 処理の失敗。即座の対応は不要だが調査が必要 | API呼び出しの失敗、DB接続エラー、予期しない例外   |
+| `warn`  | 想定外だが処理は継続可能な問題             | 非推奨APIの使用、リトライ成功、フォールバック動作 |
+| `info`  | 正常な業務処理の記録                       | サーバー起動、リクエストの開始/終了、コマンド実行 |
+| `debug` | 開発・デバッグ用の詳細情報                 | 関数の引数・戻り値、分岐条件の結果、内部状態      |
+
+#### 構造化ログ
+
+- コンテキスト情報は第一引数にオブジェクトで渡し、第二引数にメッセージを渡す:
+  ```typescript
+  getLogger().info({ requestId, method, path }, "request start");
+  ```
+- 文字列補間は使わず、関連情報はすべてオブジェクトに含める:
+  ```typescript
+  // 良い例
+  getLogger().info({ port: 3000 }, "Server started");
+  // 悪い例
+  getLogger().info(`Server started on port ${port}`);
+  ```
+
+#### 機密情報の取り扱い
+
+- 以下をログ出力に含めてはならない:
+  - Discord Botトークン
+  - APIキー（OpenAI等）
+  - ユーザーの個人情報（ID、メールアドレス等）
+  - セッション情報・認証トークン
+- 外部APIへのリクエスト/レスポンスをログに出力する場合、ヘッダーの認証情報は除外する。
+
+#### ログフォーマット
+
+- `NODE_ENV` に基づいて自動的に切り替わる（`config.yaml` での指定は不可）:
+  - `production`: JSON形式
+  - `development` / `test`: pino-pretty（カラー付き）
+
+#### テスト
+
+- テストでは `vi.mock("@/shared/utils/logger", () => ({ getLogger: vi.fn().mockReturnValue({ info: vi.fn() }) }))` でモック化する。
+- テスト内でロガーの振る舞いを検証する場合は `resetLogger()` でキャッシュをクリアする。
 
 ### テスト
 

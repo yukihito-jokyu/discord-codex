@@ -1,8 +1,9 @@
 import { randomUUID } from "node:crypto";
 import type { MiddlewareHandler } from "hono";
-import { logger as log } from "@/shared/utils/logger";
+import { getLogger } from "@/shared/utils/logger";
 
 export const logger: MiddlewareHandler = async (c, next) => {
+  const log = getLogger();
   const start = Date.now();
   const requestId = randomUUID();
   c.set("requestId", requestId);
