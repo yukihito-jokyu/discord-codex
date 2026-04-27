@@ -1,8 +1,9 @@
 import { serve } from "@hono/node-server";
-import { bootstrap } from "./app/bootstrap.js";
+import { bootstrap } from "@/app/bootstrap";
+import { logger } from "@/shared/utils/logger";
 
-const { app, port } = await bootstrap();
+const { app, port } = bootstrap();
 
 serve({ fetch: app.fetch, port }, (info) => {
-  console.log(`Server running on http://localhost:${info.port}`);
+  logger.info(`Server running on http://localhost:${info.port}`);
 });
