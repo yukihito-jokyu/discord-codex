@@ -1,0 +1,21 @@
+min_version: 1.7.0
+
+skip_output:
+  - meta
+
+pre-commit:
+  parallel: true
+  commands:
+    format:
+      tags: formatter
+      glob: "*.{ts,js,tsx,jsx}"
+      run: >
+        nix develop --command biome format --write --no-errors-on-unmatched {staged_files}
+        && git update-index --again {staged_files}
+
+    lint:
+      tags: linter
+      glob: "*.{ts,js,tsx,jsx}"
+      run: >
+        nix develop --command biome lint --write --no-errors-on-unmatched {staged_files}
+        && git update-index --again {staged_files}
