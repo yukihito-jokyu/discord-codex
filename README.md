@@ -1,5 +1,7 @@
 # discord-codex
 
+![Coverage](https://img.shields.io/badge/dynamic/json?color=brightgreen&label=coverage&query=%24.total.lines.pct&url=https%3A%2F%2Fyukihito-jokyu.github.io%2Fdiscord-codex%2Fcoverage-summary.json)
+
 ## 環境構築
 
 ### 前提条件
