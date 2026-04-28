@@ -120,3 +120,25 @@ describe("InteractionHandler command not found", () => {
     expect(response.data?.content).toBe("不明なコマンドです");
   });
 });
+
+describe("InteractionHandler command execution error", () => {
+  it("returns ephemeral error when command.execute throws", async () => {
+    const mockCommand = createMockCommand("ping");
+    (mockCommand.execute as ReturnType<typeof vi.fn>).mockRejectedValue(
+      new Error("unexpected"),
+    );
+    const router = new Router([mockCommand]);
+    const handler = new InteractionHandler(router);
+
+    const response = await handler.handle(
+      createInteraction({ commandName: "ping" }),
+    );
+
+    expect(response.type).toBe(4);
+    expect(response.data?.content).toBe(
+      // biome-ignore lint/security/noSecrets: Japanese test assertion, not a secret
+      "エラーが発生しました。しばらくしてからお試しください。",
+    );
+    expect(response.data?.flags).toBe(MessageFlags.Ephemeral);
+  });
+});

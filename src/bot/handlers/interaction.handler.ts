@@ -19,6 +19,14 @@ export class InteractionHandler {
       return message("不明なコマンドです", true);
     }
 
-    return await command.execute(interaction);
+    try {
+      return await command.execute(interaction);
+    } catch {
+      // biome-ignore lint/security/noSecrets: static Japanese error message, not a secret
+      return message(
+        "エラーが発生しました。しばらくしてからお試しください。",
+        true,
+      );
+    }
   }
 }
