@@ -76,6 +76,12 @@ describe("RedisClient connect success", () => {
     await client.connect();
     expect(mockOn).toHaveBeenCalledWith("reconnecting", expect.any(Function));
   });
+
+  it("registers ready event handler", async () => {
+    const client = await createClient();
+    await client.connect();
+    expect(mockOn).toHaveBeenCalledWith("ready", expect.any(Function));
+  });
 });
 
 describe("RedisClient connect failure", () => {
@@ -117,6 +123,68 @@ describe("RedisClient error event", () => {
     errorHandler?.(new Error("connection lost"));
     expect(client.isConnected).toBe(false);
   });
+
+  it("logs error on error event", async () => {
+    const client = await createClient();
+    await client.connect();
+    const errorHandler = mockOn.mock.calls.find(
+      (c: string[]) => c[0] === "error",
+    )?.[1];
+    errorHandler?.(new Error("connection lost"));
+    expect(mockLogError).toHaveBeenCalledWith(
+      { err: "connection lost" },
+      "Redis error",
+    );
+  });
+});
+
+describe("RedisClient reconnecting event", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    setupConnectedClient();
+  });
+
+  it("logs warn on reconnecting event", async () => {
+    const client = await createClient();
+    await client.connect();
+    const reconnectingHandler = mockOn.mock.calls.find(
+      (c: string[]) => c[0] === "reconnecting",
+    )?.[1];
+    reconnectingHandler?.();
+    expect(mockLogWarn).toHaveBeenCalledWith("Redis reconnecting...");
+  });
+});
+
+describe("RedisClient ready event", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    setupConnectedClient();
+  });
+
+  it("sets connected to true on ready event", async () => {
+    const client = await createClient();
+    await client.connect();
+    const errorHandler = mockOn.mock.calls.find(
+      (c: string[]) => c[0] === "error",
+    )?.[1];
+    errorHandler?.(new Error("connection lost"));
+    expect(client.isConnected).toBe(false);
+    const readyHandler = mockOn.mock.calls.find(
+      (c: string[]) => c[0] === "ready",
+    )?.[1];
+    readyHandler?.();
+    expect(client.isConnected).toBe(true);
+  });
+
+  it("logs info on ready event", async () => {
+    const client = await createClient();
+    await client.connect();
+    const readyHandler = mockOn.mock.calls.find(
+      (c: string[]) => c[0] === "ready",
+    )?.[1];
+    readyHandler?.();
+    expect(mockLogInfo).toHaveBeenCalledWith("Redis reconnected and ready");
+  });
 });
 
 describe("RedisClient disconnect", () => {
@@ -144,6 +212,22 @@ describe("RedisClient disconnect", () => {
     const client = await createClient();
     await client.disconnect();
     expect(mockQuit).not.toHaveBeenCalled();
+  });
+
+  it("cleans up when quit throws", async () => {
+    mockQuit.mockRejectedValue(new Error("already closed"));
+    const client = await createClient();
+    await client.connect();
+    await client.disconnect();
+    expect(client.isConnected).toBe(false);
+  });
+
+  it("logs info when quit throws", async () => {
+    mockQuit.mockRejectedValue(new Error("already closed"));
+    const client = await createClient();
+    await client.connect();
+    await client.disconnect();
+    expect(mockLogInfo).toHaveBeenCalledWith("Redis disconnected");
   });
 });
 
