@@ -1,13 +1,17 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-describe("env", () => {
-  const originalEnv = process.env;
+const originalEnv = process.env;
 
+function setupEnv() {
   beforeEach(() => {
     vi.resetModules();
     vi.restoreAllMocks();
     process.env = { ...originalEnv };
   });
+}
+
+describe("env NODE_ENV", () => {
+  setupEnv();
 
   it('defaults NODE_ENV to "development" when not set', async () => {
     delete process.env.NODE_ENV;
@@ -51,5 +55,34 @@ describe("env", () => {
     process.env.NODE_ENV = "";
 
     await expect(import("@/app/config/env")).rejects.toThrow();
+  });
+});
+
+describe("env REDIS_URL", () => {
+  setupEnv();
+
+  it("parses REDIS_URL when set", async () => {
+    process.env.NODE_ENV = "test";
+    process.env.REDIS_URL = "redis://localhost:6379";
+
+    const { env } = await import("@/app/config/env");
+
+    expect(env.REDIS_URL).toBe("redis://localhost:6379");
+  });
+
+  it("returns undefined for REDIS_URL when not set", async () => {
+    delete process.env.REDIS_URL;
+
+    const { env } = await import("@/app/config/env");
+
+    expect(env.REDIS_URL).toBeUndefined();
+  });
+
+  it("accepts empty string for REDIS_URL", async () => {
+    process.env.REDIS_URL = "";
+
+    const { env } = await import("@/app/config/env");
+
+    expect(env.REDIS_URL).toBe("");
   });
 });
