@@ -20,6 +20,10 @@ export class RedisClient {
       this.client.on("reconnecting", () => {
         getLogger().warn("Redis reconnecting...");
       });
+      this.client.on("ready", () => {
+        this.connected = true;
+        getLogger().info("Redis reconnected and ready");
+      });
       await this.client.connect();
       this.connected = true;
       getLogger().info({ url: this.url }, "Redis connected");
@@ -28,16 +32,22 @@ export class RedisClient {
         { err },
         "Redis connection failed, falling back to in-memory",
       );
+      this.client = null;
       this.connected = false;
     }
   }
 
   async disconnect(): Promise<void> {
     if (this.client) {
-      await this.client.quit();
-      this.client = null;
-      this.connected = false;
-      getLogger().info("Redis disconnected");
+      try {
+        await this.client.quit();
+      } catch {
+        // 接続が既に切断されている場合は無視
+      } finally {
+        this.client = null;
+        this.connected = false;
+        getLogger().info("Redis disconnected");
+      }
     }
   }
 
