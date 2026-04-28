@@ -103,16 +103,50 @@ describe("AIService chat existing conversation", () => {
       expect(result.value).toBe("Continued response");
     }
   });
+
+  it("sends only user message without system prompt on resume", async () => {
+    const service = await createService();
+    await service.chat("channel-2", "Continue");
+    expect(mockChat).toHaveBeenCalledWith("thread-existing", "Continue");
+  });
 });
 
-describe("AIService chat error handling", () => {
+describe("AIService chat error handling Redis get", () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    mockRedisGet.mockResolvedValue(null);
-    mockChat.mockRejectedValue(new Error("API rate limit"));
   });
 
-  it("returns ExternalServiceError on client failure", async () => {
+  it("returns ExternalServiceError for Redis on redis.get failure", async () => {
+    mockRedisGet.mockRejectedValue(new Error("connection refused"));
+    const service = await createService();
+    const result = await service.chat("channel-3", "Hello");
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.error.name).toBe("ExternalServiceError");
+      expect(result.error.message).toContain("Redis");
+      expect(result.error.message).toContain("connection refused");
+    }
+  });
+
+  it("handles non-Error thrown value from Redis on redis.get", async () => {
+    mockRedisGet.mockRejectedValue(42);
+    const service = await createService();
+    const result = await service.chat("channel-3", "Hello");
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.error.message).toContain("42");
+    }
+  });
+});
+
+describe("AIService chat error handling Codex", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it("returns ExternalServiceError for Codex on client failure", async () => {
+    mockRedisGet.mockResolvedValue(null);
+    mockChat.mockRejectedValue(new Error("API rate limit"));
     const service = await createService();
     const result = await service.chat("channel-3", "Hello");
     expect(result.ok).toBe(false);
@@ -120,6 +154,57 @@ describe("AIService chat error handling", () => {
       expect(result.error.name).toBe("ExternalServiceError");
       expect(result.error.message).toContain("Codex");
       expect(result.error.message).toContain("API rate limit");
+    }
+  });
+
+  it("handles non-Error thrown value from Codex", async () => {
+    mockRedisGet.mockResolvedValue(null);
+    mockChat.mockRejectedValue("string error");
+    const service = await createService();
+    const result = await service.chat("channel-3", "Hello");
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.error.message).toContain("string error");
+    }
+  });
+});
+
+describe("AIService chat error handling Redis set", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it("returns ExternalServiceError for Redis on redis.set failure", async () => {
+    mockRedisGet.mockResolvedValue(null);
+    mockChat.mockResolvedValue({
+      response: "AI response",
+      threadId: "thread-abc",
+      usage: null,
+    });
+    mockRedisSet.mockRejectedValue(new Error("write failed"));
+    const service = await createService();
+    const result = await service.chat("channel-3", "Hello");
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.error.name).toBe("ExternalServiceError");
+      expect(result.error.message).toContain("Redis");
+      expect(result.error.message).toContain("write failed");
+    }
+  });
+
+  it("handles non-Error thrown value from Redis on redis.set", async () => {
+    mockRedisGet.mockResolvedValue(null);
+    mockChat.mockResolvedValue({
+      response: "AI response",
+      threadId: "thread-abc",
+      usage: null,
+    });
+    mockRedisSet.mockRejectedValue(99);
+    const service = await createService();
+    const result = await service.chat("channel-3", "Hello");
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.error.message).toContain("99");
     }
   });
 });
@@ -220,5 +305,35 @@ describe("AIService resetConversation", () => {
     const service = await createService();
     await service.resetConversation("channel-5");
     expect(mockRedisDelete).toHaveBeenCalledWith("thread:channel-5");
+  });
+
+  it("propagates error when redis.delete fails", async () => {
+    mockRedisDelete.mockRejectedValue(new Error("redis down"));
+    const service = await createService();
+    await expect(service.resetConversation("channel-5")).rejects.toThrow(
+      "redis down",
+    );
+  });
+});
+
+describe("AIService chat empty thread ID from Redis", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mockRedisGet.mockResolvedValue("");
+    mockChat.mockResolvedValue({
+      response: "New thread response",
+      threadId: "thread-new",
+      usage: null,
+    });
+    mockRedisSet.mockResolvedValue(undefined);
+  });
+
+  it("starts new thread when Redis returns empty string", async () => {
+    const service = await createService();
+    await service.chat("channel-empty", "Hello");
+    expect(mockChat).toHaveBeenCalledWith(
+      "",
+      expect.stringContaining("AIアシスタント"),
+    );
   });
 });
