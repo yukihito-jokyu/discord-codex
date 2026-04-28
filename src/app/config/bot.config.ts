@@ -26,6 +26,11 @@ export const botConfigSchema = z.object({
       level: logLevelSchema.optional(),
     })
     .optional(),
+  redis: z
+    .object({
+      url: z.string().min(1),
+    })
+    .optional(),
 });
 
 export type BotConfig = z.infer<typeof botConfigSchema>;

@@ -12,6 +12,8 @@ bot:
   timeoutMs: 30000
 server:
   port: 3000
+redis:
+  url: "redis://localhost:6379"
 `;
 
 describe("botConfigSchema valid", () => {
@@ -202,6 +204,49 @@ describe("botConfigSchema logging invalid", () => {
   });
 });
 
+describe("botConfigSchema redis valid", () => {
+  it("accepts config without redis section", () => {
+    const result = botConfigSchema.parse({
+      bot: { defaultModel: "codex-mini", maxTokens: 4096, timeoutMs: 30000 },
+      server: { port: 3000 },
+    });
+
+    expect(result).not.toHaveProperty("redis");
+  });
+
+  it("accepts valid redis.url", () => {
+    const result = botConfigSchema.parse({
+      bot: { defaultModel: "codex-mini", maxTokens: 4096, timeoutMs: 30000 },
+      server: { port: 3000 },
+      redis: { url: "redis://localhost:6379" },
+    });
+
+    expect(result.redis?.url).toBe("redis://localhost:6379");
+  });
+});
+
+describe("botConfigSchema redis invalid", () => {
+  it("rejects empty string for redis.url", () => {
+    expect(() =>
+      botConfigSchema.parse({
+        bot: { defaultModel: "codex-mini", maxTokens: 4096, timeoutMs: 30000 },
+        server: { port: 3000 },
+        redis: { url: "" },
+      }),
+    ).toThrow();
+  });
+
+  it("rejects non-string redis.url", () => {
+    expect(() =>
+      botConfigSchema.parse({
+        bot: { defaultModel: "codex-mini", maxTokens: 4096, timeoutMs: 30000 },
+        server: { port: 3000 },
+        redis: { url: 123 },
+      }),
+    ).toThrow();
+  });
+});
+
 async function setupLoadConfig(mockValue: string) {
   const { readFileSync } = await import("node:fs");
   vi.mocked(readFileSync).mockReturnValue(mockValue);
@@ -226,6 +271,7 @@ describe("loadConfig", () => {
         timeoutMs: 30000,
       },
       server: { port: 3000 },
+      redis: { url: "redis://localhost:6379" },
     });
   });
 
