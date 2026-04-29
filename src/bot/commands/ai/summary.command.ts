@@ -8,7 +8,7 @@ import type {
 import { getLogger } from "@/shared/utils/logger";
 import type { Command } from "../command.interface";
 
-const URL_PATTERN = /https?:\/\/[^\s<>"|]+/g;
+const URL_PATTERN = /https?:\/\/[^\s<>"|()）,，。、;；：！！]+/g;
 
 export class SummaryCommand implements Command {
   readonly name = "summary";
@@ -77,7 +77,8 @@ export class SummaryCommand implements Command {
       return;
     }
 
-    const result = await this.summaryService.summarize(urls);
+    const uniqueUrls = [...new Set(urls)];
+    const result = await this.summaryService.summarize(uniqueUrls);
     if (!result.ok) {
       log.error(
         { error: result.error.message, channelId },
@@ -97,6 +98,6 @@ export class SummaryCommand implements Command {
       interactionToken,
       result.value,
     );
-    log.info({ channelId, urlCount: urls.length }, "Summary completed");
+    log.info({ channelId, urlCount: uniqueUrls.length }, "Summary completed");
   }
 }
