@@ -11,11 +11,10 @@ const server = serve({ fetch: app.fetch, port }, (info) => {
 function shutdown() {
   getLogger().info("Shutting down");
   gateway?.stop();
-  server.close();
+  server.close(() => {
+    process.exit(0);
+  });
 }
 
 process.on("SIGTERM", shutdown);
-process.on("SIGINT", () => {
-  shutdown();
-  process.exit(0);
-});
+process.on("SIGINT", shutdown);
