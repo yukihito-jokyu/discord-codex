@@ -23,6 +23,12 @@ describe("PingCommand", () => {
     expect(command.name).toBe("ping");
   });
 
+  it("has definition with description", () => {
+    expect(command.definition).toEqual({
+      description: "Ping-Pong",
+    });
+  });
+
   it("returns message with content 'Pong!'", async () => {
     const response = await command.execute(createInteraction());
 
