@@ -156,6 +156,40 @@ export class DiscordApiClient {
     }
   }
 
+  async getFirstMessage(channelId: string): Promise<string | null> {
+    const log = getLogger();
+    const url = `${this.baseUrl}/channels/${channelId}/messages?limit=50`;
+
+    try {
+      const response = await fetch(url, {
+        headers: { Authorization: `Bot ${this.botToken}` },
+      });
+
+      if (!response.ok) {
+        log.error(
+          { status: response.status, channelId },
+          "Failed to fetch messages",
+        );
+        return null;
+      }
+
+      const messages = (await response.json()) as Array<{
+        id: string;
+        content?: string;
+      }>;
+      if (messages.length === 0) return null;
+
+      const oldest = messages.reduce((a, b) => (a.id < b.id ? a : b));
+      return oldest.content ?? null;
+    } catch (e) {
+      log.error(
+        { err: e instanceof Error ? e.message : String(e), channelId },
+        "Message fetch request failed",
+      );
+      return null;
+    }
+  }
+
   async isThreadChannel(channelId: string): Promise<boolean> {
     const log = getLogger();
     const url = `${this.baseUrl}/channels/${channelId}`;
