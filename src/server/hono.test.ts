@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 vi.mock("@/shared/utils/logger", () => ({
-  getLogger: vi.fn().mockReturnValue({ info: vi.fn() }),
+  getLogger: vi.fn().mockReturnValue({ info: vi.fn(), warn: vi.fn() }),
 }));
 
 describe("createApp without deps", () => {
@@ -44,6 +44,17 @@ describe("createApp without deps", () => {
     const res = await app.request("/api/webhooks/discord", { method: "POST" });
 
     expect(res.status).toBe(404);
+  });
+
+  it("logs warning when called without deps", async () => {
+    const { getLogger } = await import("@/shared/utils/logger");
+    const { createApp } = await import("@/server/hono");
+
+    createApp();
+
+    expect(getLogger().warn).toHaveBeenCalledWith(
+      "createApp called without deps — Discord webhook route not mounted",
+    );
   });
 });
 
