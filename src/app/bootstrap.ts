@@ -13,6 +13,24 @@ import { DiscordGateway } from "@/server/gateway/discord.gateway";
 import { createApp } from "@/server/hono";
 import { createLogger, getLogger } from "@/shared/utils/logger";
 
+function initDiscord(aiService: AIService) {
+  const botToken = env.DISCORD_BOT_TOKEN;
+  const applicationId = env.DISCORD_APPLICATION_ID;
+  if (!botToken) {
+    throw new Error("DISCORD_BOT_TOKEN is required");
+  }
+  if (!applicationId) {
+    throw new Error("DISCORD_APPLICATION_ID is required");
+  }
+  const discordApiClient = new DiscordApiClient(botToken);
+  const messageHandler = new MessageHandler(
+    aiService,
+    discordApiClient,
+    applicationId,
+  );
+  return { botToken, applicationId, discordApiClient, messageHandler };
+}
+
 export function bootstrap() {
   const config = loadConfig();
 
@@ -37,32 +55,22 @@ export function bootstrap() {
   const router = new Router(commands);
   const interactionHandler = new InteractionHandler(router);
 
-  const botToken = env.DISCORD_BOT_TOKEN ?? "";
-  const applicationId = env.DISCORD_APPLICATION_ID ?? "";
-  const discordApiClient = new DiscordApiClient(botToken);
-  const messageHandler = new MessageHandler(
-    aiService,
-    discordApiClient,
-    applicationId,
-  );
+  const { botToken, messageHandler } = initDiscord(aiService);
 
   const app = createApp({ interactionHandler, messageHandler, botToken });
 
-  let gateway: DiscordGateway | null = null;
-  if (env.DISCORD_BOT_TOKEN) {
-    gateway = new DiscordGateway();
-    const webhookUrl = `http://localhost:${config.server.port}/api/webhooks/discord`;
-    gateway.start(webhookUrl).catch((err) => {
-      log.error({ err: String(err) }, "Gateway startup failed");
-    });
-  }
+  const gateway = new DiscordGateway();
+  const webhookUrl = `http://localhost:${config.server.port}/api/webhooks/discord`;
+  gateway.start(webhookUrl).catch((err) => {
+    log.error({ err: String(err) }, "Gateway startup failed");
+  });
 
   log.info({ port: config.server.port }, "Bootstrap completed");
 
   const shutdown = async () => {
     log.info("Shutting down");
     await redis.disconnect();
-    gateway?.stop();
+    gateway.stop();
   };
 
   return { app, port: config.server.port, shutdown };
