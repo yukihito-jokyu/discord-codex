@@ -6,7 +6,7 @@ function setupEnv() {
   beforeEach(() => {
     vi.resetModules();
     vi.restoreAllMocks();
-    process.env = { ...originalEnv };
+    process.env = { ...originalEnv, NODE_ENV: "test" };
   });
 }
 
@@ -168,5 +168,89 @@ describe("env DISCORD_APPLICATION_ID", () => {
     const { env } = await import("@/app/config/env");
 
     expect(env.DISCORD_APPLICATION_ID).toBeUndefined();
+  });
+});
+
+describe("env DISCORD_GUILD_ID", () => {
+  setupEnv();
+
+  it("parses DISCORD_GUILD_ID when set", async () => {
+    process.env.NODE_ENV = "test";
+    process.env.DISCORD_GUILD_ID = "guild-123";
+
+    const { env } = await import("@/app/config/env");
+
+    expect(env.DISCORD_GUILD_ID).toBe("guild-123");
+  });
+
+  it("returns undefined when not set", async () => {
+    delete process.env.DISCORD_GUILD_ID;
+
+    const { env } = await import("@/app/config/env");
+
+    expect(env.DISCORD_GUILD_ID).toBeUndefined();
+  });
+});
+
+describe("env CODEX_BASE_URL", () => {
+  setupEnv();
+
+  it("parses CODEX_BASE_URL when set", async () => {
+    process.env.NODE_ENV = "test";
+    process.env.CODEX_BASE_URL = "https://api.example.com";
+
+    const { env } = await import("@/app/config/env");
+
+    expect(env.CODEX_BASE_URL).toBe("https://api.example.com");
+  });
+
+  it("returns undefined when not set", async () => {
+    delete process.env.CODEX_BASE_URL;
+
+    const { env } = await import("@/app/config/env");
+
+    expect(env.CODEX_BASE_URL).toBeUndefined();
+  });
+});
+
+describe("env CODEX_API_KEY", () => {
+  setupEnv();
+
+  it("parses CODEX_API_KEY when set", async () => {
+    process.env.NODE_ENV = "test";
+    process.env.CODEX_API_KEY = "codex-key-123";
+
+    const { env } = await import("@/app/config/env");
+
+    expect(env.CODEX_API_KEY).toBe("codex-key-123");
+  });
+
+  it("returns undefined when not set", async () => {
+    delete process.env.CODEX_API_KEY;
+
+    const { env } = await import("@/app/config/env");
+
+    expect(env.CODEX_API_KEY).toBeUndefined();
+  });
+});
+
+describe("env CODEX_MODEL", () => {
+  setupEnv();
+
+  it("parses CODEX_MODEL when set", async () => {
+    process.env.NODE_ENV = "test";
+    process.env.CODEX_MODEL = "codex-mini";
+
+    const { env } = await import("@/app/config/env");
+
+    expect(env.CODEX_MODEL).toBe("codex-mini");
+  });
+
+  it("returns undefined when not set", async () => {
+    delete process.env.CODEX_MODEL;
+
+    const { env } = await import("@/app/config/env");
+
+    expect(env.CODEX_MODEL).toBeUndefined();
   });
 });

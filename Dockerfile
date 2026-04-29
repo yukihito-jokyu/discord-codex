@@ -20,5 +20,7 @@ COPY package.json pnpm-lock.yaml ./
 RUN pnpm install --frozen-lockfile --prod
 
 COPY --from=builder /app/dist ./dist
+COPY --from=builder /app/src/app/config/config.yaml ./src/app/config/config.yaml
 
+ENV NODE_ENV=production
 CMD ["node", "dist/index.js"]

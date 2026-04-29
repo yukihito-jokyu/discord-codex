@@ -59,4 +59,16 @@ export class AIService {
   async resetConversation(channelId: string): Promise<void> {
     await this.redis.delete(`thread:${channelId}`);
   }
+
+  async linkThreadChannel(
+    originalChannelId: string,
+    threadChannelId: string,
+  ): Promise<void> {
+    const threadId = await this.redis.get(`thread:${originalChannelId}`);
+    if (threadId) {
+      await this.redis.set(`thread:${threadChannelId}`, threadId, {
+        ttlMs: DEFAULT_TTL_MS,
+      });
+    }
+  }
 }

@@ -13,49 +13,68 @@ import { DiscordGateway } from "@/server/gateway/discord.gateway";
 import { createApp } from "@/server/hono";
 import { createLogger, getLogger } from "@/shared/utils/logger";
 
-function initDiscord(aiService: AIService) {
+function createAIService(): { aiService: AIService; redis: RedisClient } {
+  const codexApiKey = env.CODEX_API_KEY ?? env.OPENAI_API_KEY;
+  if (!codexApiKey) {
+    throw new Error("CODEX_API_KEY or OPENAI_API_KEY is required");
+  }
+  const codex = new CodexClient(codexApiKey, {
+    baseUrl: env.CODEX_BASE_URL,
+    model: env.CODEX_MODEL,
+  });
+  const redisUrl = env.REDIS_URL ?? "redis://localhost:6379";
+  const redis = new RedisClient(redisUrl);
+  redis.connect().catch((err) => {
+    getLogger().warn({ err: String(err) }, "Redis connection failed");
+  });
+  return { aiService: new AIService(codex, redis), redis };
+}
+
+function createDiscordDeps(aiService: AIService) {
   const botToken = env.DISCORD_BOT_TOKEN;
   const applicationId = env.DISCORD_APPLICATION_ID;
-  if (!botToken) {
-    throw new Error("DISCORD_BOT_TOKEN is required");
-  }
-  if (!applicationId) {
-    throw new Error("DISCORD_APPLICATION_ID is required");
-  }
+  if (!botToken) throw new Error("DISCORD_BOT_TOKEN is required");
+  if (!applicationId) throw new Error("DISCORD_APPLICATION_ID is required");
+
   const discordApiClient = new DiscordApiClient(botToken);
+  const chatCommand = new ChatCommand(
+    aiService,
+    discordApiClient,
+    applicationId,
+  );
+  const commands = [new PingCommand(), chatCommand];
   const messageHandler = new MessageHandler(
     aiService,
     discordApiClient,
     applicationId,
   );
-  return { botToken, applicationId, discordApiClient, messageHandler };
+  const router = new Router(commands);
+  const interactionHandler = new InteractionHandler(router);
+
+  const guildId = env.DISCORD_GUILD_ID;
+  if (guildId) {
+    discordApiClient
+      .registerGuildCommands(applicationId, guildId, commands)
+      .catch((err) => {
+        getLogger().error(
+          { err: String(err) },
+          "Guild command registration failed",
+        );
+      });
+  }
+
+  return { botToken, interactionHandler, messageHandler };
 }
 
 export function bootstrap() {
   const config = loadConfig();
-
   createLogger(config.logging);
-
   const log = getLogger();
   log.debug({ config }, "Config loaded");
 
-  const redis = new RedisClient(config.redis?.url ?? "redis://localhost:6379");
-  redis.connect().catch((err) => {
-    log.warn({ err: String(err) }, "Redis connection failed");
-  });
-
-  const apiKey = env.OPENAI_API_KEY;
-  if (!apiKey) {
-    throw new Error("OPENAI_API_KEY is required");
-  }
-  const codex = new CodexClient(apiKey);
-  const aiService = new AIService(codex, redis);
-
-  const commands = [new PingCommand(), new ChatCommand(aiService)];
-  const router = new Router(commands);
-  const interactionHandler = new InteractionHandler(router);
-
-  const { botToken, messageHandler } = initDiscord(aiService);
+  const { aiService, redis } = createAIService();
+  const { botToken, interactionHandler, messageHandler } =
+    createDiscordDeps(aiService);
 
   const app = createApp({ interactionHandler, messageHandler, botToken });
 

@@ -4,7 +4,7 @@ tasks:
   build:
     desc: Build with esbuild
     cmds:
-      - nix develop --command pnpm exec esbuild src/index.ts --bundle --platform=node --format=esm --outdir=dist
+      - nix develop --command pnpm exec tsx esbuild.config.ts
 
   dev:
     desc: Run in development mode
@@ -41,3 +41,23 @@ tasks:
     desc: Run pre-commit hooks manually
     cmds:
       - nix develop --command lefthook run pre-commit
+
+  docker:build:
+    desc: Build Docker images
+    cmds:
+      - docker compose build
+
+  docker:up:
+    desc: Start Docker containers
+    cmds:
+      - docker compose up
+
+  docker:down:
+    desc: Stop and remove Docker containers
+    cmds:
+      - docker compose down
+
+  docker:logs:
+    desc: View Docker container logs
+    cmds:
+      - docker compose logs -f

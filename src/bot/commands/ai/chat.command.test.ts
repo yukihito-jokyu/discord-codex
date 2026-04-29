@@ -1,13 +1,18 @@
 import { MessageFlags } from "discord-api-types/v10";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { AIService } from "@/ai/services/ai.service";
+import type { DiscordApiClient } from "@/infrastructure/discord/discord-api.client";
 import type { DomainInteraction } from "@/sdk/discord/types/domain";
 import { ExternalServiceError } from "@/shared/types/errors";
 import { err, ok } from "@/shared/types/result";
 import { ChatCommand } from "./chat.command";
 
 vi.mock("@/shared/utils/logger", () => ({
-  getLogger: vi.fn().mockReturnValue({ info: vi.fn(), debug: vi.fn() }),
+  getLogger: vi.fn().mockReturnValue({
+    info: vi.fn(),
+    debug: vi.fn(),
+    error: vi.fn(),
+  }),
 }));
 
 function createInteraction(
@@ -20,7 +25,7 @@ function createInteraction(
     userId: "user-1",
     commandName: "chat",
     options: { message: "Hello" },
-    raw: {},
+    raw: { token: "test-token" },
     ...overrides,
   };
 }
@@ -29,146 +34,269 @@ function createMockAIService(): AIService {
   return {
     chat: vi.fn(),
     resetConversation: vi.fn(),
+    linkThreadChannel: vi.fn().mockResolvedValue(undefined),
   } as unknown as AIService;
 }
 
-describe("ChatCommand properties", () => {
-  let aiService: AIService;
+function createMockDiscordApiClient(): DiscordApiClient {
+  return {
+    editInteractionResponse: vi.fn().mockResolvedValue("msg-123"),
+    createThreadFromMessage: vi.fn().mockResolvedValue("thread-999"),
+    sendMessage: vi.fn().mockResolvedValue(true),
+    registerGuildCommands: vi.fn().mockResolvedValue(undefined),
+    isThreadChannel: vi.fn().mockResolvedValue(false),
+  } as unknown as DiscordApiClient;
+}
 
-  beforeEach(() => {
-    aiService = createMockAIService();
+const APPLICATION_ID = "test-app-id";
+
+function flushPromises(): Promise<void> {
+  return new Promise((resolve) => setImmediate(resolve));
+}
+
+describe("ChatCommand properties", () => {
+  it("has name 'chat'", () => {
+    const command = new ChatCommand(
+      createMockAIService(),
+      createMockDiscordApiClient(),
+      APPLICATION_ID,
+    );
+    expect(command.name).toBe("chat");
   });
 
-  it("has name 'chat'", () => {
-    const command = new ChatCommand(aiService);
-    expect(command.name).toBe("chat");
+  it("has definition with description and options", () => {
+    const command = new ChatCommand(
+      createMockAIService(),
+      createMockDiscordApiClient(),
+      APPLICATION_ID,
+    );
+    expect(command.definition).toEqual({
+      description: "AIとチャット",
+      options: [
+        {
+          name: "message",
+          // biome-ignore lint/security/noSecrets: static Japanese UI text, not a secret
+          description: "AIに送信するメッセージ",
+          type: 3,
+          required: true,
+        },
+      ],
+    });
   });
 });
 
-describe("ChatCommand message extraction", () => {
+describe("ChatCommand deferred response", () => {
   let aiService: AIService;
+  let discordApiClient: DiscordApiClient;
 
   beforeEach(() => {
     aiService = createMockAIService();
+    discordApiClient = createMockDiscordApiClient();
   });
 
-  it("extracts message option from interaction", async () => {
-    const command = new ChatCommand(aiService);
+  it("returns deferred response immediately", async () => {
     (aiService.chat as ReturnType<typeof vi.fn>).mockResolvedValue(
       ok("AI response"),
+    );
+    const command = new ChatCommand(
+      aiService,
+      discordApiClient,
+      APPLICATION_ID,
+    );
+
+    const response = await command.execute(createInteraction());
+
+    expect(response.type).toBe(5);
+  });
+
+  it("returns error message when interaction has no token", async () => {
+    const command = new ChatCommand(
+      aiService,
+      discordApiClient,
+      APPLICATION_ID,
+    );
+
+    const response = await command.execute(createInteraction({ raw: {} }));
+
+    expect(response.type).toBe(4);
+    expect(response.data?.flags).toBe(MessageFlags.Ephemeral);
+  });
+});
+
+describe("ChatCommand background input forwarding", () => {
+  let aiService: AIService;
+  let discordApiClient: DiscordApiClient;
+
+  beforeEach(() => {
+    aiService = createMockAIService();
+    discordApiClient = createMockDiscordApiClient();
+  });
+
+  it("extracts message option and passes to AIService", async () => {
+    (aiService.chat as ReturnType<typeof vi.fn>).mockResolvedValue(
+      ok("AI response"),
+    );
+    const command = new ChatCommand(
+      aiService,
+      discordApiClient,
+      APPLICATION_ID,
     );
 
     await command.execute(
       createInteraction({ options: { message: "Hello AI" } }),
     );
+    await flushPromises();
 
     expect(aiService.chat).toHaveBeenCalledWith("channel-1", "Hello AI");
   });
 
-  it("falls back to empty string when message option is missing", async () => {
-    const command = new ChatCommand(aiService);
-    (aiService.chat as ReturnType<typeof vi.fn>).mockResolvedValue(
-      ok("AI response"),
-    );
-
-    await command.execute(createInteraction({ options: {} }));
-
-    expect(aiService.chat).toHaveBeenCalledWith("channel-1", "");
-  });
-
-  it("falls back to empty string when options is undefined", async () => {
-    const command = new ChatCommand(aiService);
-    (aiService.chat as ReturnType<typeof vi.fn>).mockResolvedValue(
-      ok("AI response"),
-    );
-
-    await command.execute(createInteraction({ options: undefined }));
-
-    expect(aiService.chat).toHaveBeenCalledWith("channel-1", "");
-  });
-
-  it("handles empty message string", async () => {
-    const command = new ChatCommand(aiService);
-    (aiService.chat as ReturnType<typeof vi.fn>).mockResolvedValue(
-      ok("AI response"),
-    );
-
-    await command.execute(createInteraction({ options: { message: "" } }));
-
-    expect(aiService.chat).toHaveBeenCalledWith("channel-1", "");
-  });
-});
-
-describe("ChatCommand channelId forwarding", () => {
-  let aiService: AIService;
-
-  beforeEach(() => {
-    aiService = createMockAIService();
-  });
-
   it("passes channelId to AIService", async () => {
-    const command = new ChatCommand(aiService);
     (aiService.chat as ReturnType<typeof vi.fn>).mockResolvedValue(
       ok("AI response"),
+    );
+    const command = new ChatCommand(
+      aiService,
+      discordApiClient,
+      APPLICATION_ID,
     );
 
     await command.execute(createInteraction({ channelId: "ch-999" }));
+    await flushPromises();
 
     expect(aiService.chat).toHaveBeenCalledWith("ch-999", expect.any(String));
   });
 });
 
-describe("ChatCommand success response", () => {
+describe("ChatCommand thread creation flow", () => {
   let aiService: AIService;
+  let discordApiClient: DiscordApiClient;
 
   beforeEach(() => {
     aiService = createMockAIService();
+    discordApiClient = createMockDiscordApiClient();
   });
 
-  it("returns message response with AI result on success", async () => {
-    const command = new ChatCommand(aiService);
+  it("edits response with user message then creates thread", async () => {
     (aiService.chat as ReturnType<typeof vi.fn>).mockResolvedValue(
       ok("AI response"),
     );
-
-    const response = await command.execute(createInteraction());
-
-    expect(response.type).toBe(4);
-    expect(response.data?.content).toBe("AI response");
-  });
-
-  it("returns non-ephemeral response on success", async () => {
-    const command = new ChatCommand(aiService);
-    (aiService.chat as ReturnType<typeof vi.fn>).mockResolvedValue(
-      ok("AI response"),
+    const command = new ChatCommand(
+      aiService,
+      discordApiClient,
+      APPLICATION_ID,
     );
 
-    const response = await command.execute(createInteraction());
+    await command.execute(createInteraction());
+    await flushPromises();
 
-    expect(response.data?.flags).toBeUndefined();
+    expect(discordApiClient.editInteractionResponse).toHaveBeenCalledWith(
+      APPLICATION_ID,
+      "test-token",
+      "> Hello",
+    );
+    expect(discordApiClient.createThreadFromMessage).toHaveBeenCalledWith(
+      "channel-1",
+      "msg-123",
+      "Hello",
+    );
+    expect(discordApiClient.sendMessage).toHaveBeenCalledWith(
+      "thread-999",
+      "AI response",
+    );
   });
 });
 
-describe("ChatCommand error response", () => {
+describe("ChatCommand thread fallback", () => {
   let aiService: AIService;
+  let discordApiClient: DiscordApiClient;
 
   beforeEach(() => {
     aiService = createMockAIService();
+    discordApiClient = createMockDiscordApiClient();
   });
 
-  it("returns ephemeral error when AIService fails", async () => {
-    const command = new ChatCommand(aiService);
+  it("sends AI response in channel when thread creation fails", async () => {
+    (aiService.chat as ReturnType<typeof vi.fn>).mockResolvedValue(
+      ok("AI response"),
+    );
+    (
+      discordApiClient.createThreadFromMessage as ReturnType<typeof vi.fn>
+    ).mockResolvedValue(null);
+    const command = new ChatCommand(
+      aiService,
+      discordApiClient,
+      APPLICATION_ID,
+    );
+
+    await command.execute(createInteraction());
+    await flushPromises();
+
+    expect(discordApiClient.sendMessage).toHaveBeenCalledWith(
+      "channel-1",
+      "AI response",
+    );
+  });
+});
+
+describe("ChatCommand error in thread", () => {
+  let aiService: AIService;
+  let discordApiClient: DiscordApiClient;
+
+  beforeEach(() => {
+    aiService = createMockAIService();
+    discordApiClient = createMockDiscordApiClient();
+  });
+
+  it("sends error in thread when AIService fails", async () => {
     (aiService.chat as ReturnType<typeof vi.fn>).mockResolvedValue(
       err(new ExternalServiceError("Codex", "timeout")),
     );
+    const command = new ChatCommand(
+      aiService,
+      discordApiClient,
+      APPLICATION_ID,
+    );
 
-    const response = await command.execute(createInteraction());
+    await command.execute(createInteraction());
+    await flushPromises();
 
-    expect(response.type).toBe(4);
-    expect(response.data?.content).toBe(
+    expect(discordApiClient.sendMessage).toHaveBeenCalledWith(
+      "thread-999",
       // biome-ignore lint/security/noSecrets: Japanese test assertion, not a secret
       "エラーが発生しました。しばらくしてからお試しください。",
     );
-    expect(response.data?.flags).toBe(MessageFlags.Ephemeral);
+  });
+});
+
+describe("ChatCommand inside existing thread", () => {
+  let aiService: AIService;
+  let discordApiClient: DiscordApiClient;
+
+  beforeEach(() => {
+    aiService = createMockAIService();
+    discordApiClient = createMockDiscordApiClient();
+    (
+      discordApiClient.isThreadChannel as ReturnType<typeof vi.fn>
+    ).mockResolvedValue(true);
+  });
+
+  it("skips thread creation and sends response directly", async () => {
+    (aiService.chat as ReturnType<typeof vi.fn>).mockResolvedValue(
+      ok("AI response"),
+    );
+    const command = new ChatCommand(
+      aiService,
+      discordApiClient,
+      APPLICATION_ID,
+    );
+
+    await command.execute(createInteraction());
+    await flushPromises();
+
+    expect(discordApiClient.createThreadFromMessage).not.toHaveBeenCalled();
+    expect(discordApiClient.sendMessage).toHaveBeenCalledWith(
+      "channel-1",
+      "AI response",
+    );
   });
 });
