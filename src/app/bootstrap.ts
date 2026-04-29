@@ -1,19 +1,26 @@
 import { CodexClient } from "@/ai/client/codex.client";
 import { AIService } from "@/ai/services/ai.service";
+import { SummaryService } from "@/ai/services/summary.service";
 import { loadConfig } from "@/app/config/bot.config";
 import { env } from "@/app/config/env";
 import { ChatCommand } from "@/bot/commands/ai/chat.command";
+import { SummaryCommand } from "@/bot/commands/ai/summary.command";
 import { PingCommand } from "@/bot/commands/utility/ping.command";
 import { InteractionHandler } from "@/bot/handlers/interaction.handler";
 import { MessageHandler } from "@/bot/handlers/message.handler";
 import { Router } from "@/bot/router";
 import { DiscordApiClient } from "@/infrastructure/discord/discord-api.client";
 import { RedisClient } from "@/infrastructure/redis/redis.client";
+import { WebFetcherClient } from "@/infrastructure/web/web-fetcher.client";
 import { DiscordGateway } from "@/server/gateway/discord.gateway";
 import { createApp } from "@/server/hono";
 import { createLogger, getLogger } from "@/shared/utils/logger";
 
-function createAIService(): { aiService: AIService; redis: RedisClient } {
+function createAIService(): {
+  aiService: AIService;
+  redis: RedisClient;
+  codex: CodexClient;
+} {
   const codexApiKey = env.CODEX_API_KEY ?? env.OPENAI_API_KEY;
   if (!codexApiKey) {
     throw new Error("CODEX_API_KEY or OPENAI_API_KEY is required");
@@ -27,10 +34,10 @@ function createAIService(): { aiService: AIService; redis: RedisClient } {
   redis.connect().catch((err) => {
     getLogger().warn({ err: String(err) }, "Redis connection failed");
   });
-  return { aiService: new AIService(codex, redis), redis };
+  return { aiService: new AIService(codex, redis), redis, codex };
 }
 
-function createDiscordDeps(aiService: AIService) {
+function createDiscordDeps(aiService: AIService, codex: CodexClient) {
   const botToken = env.DISCORD_BOT_TOKEN;
   const applicationId = env.DISCORD_APPLICATION_ID;
   if (!botToken) throw new Error("DISCORD_BOT_TOKEN is required");
@@ -42,7 +49,13 @@ function createDiscordDeps(aiService: AIService) {
     discordApiClient,
     applicationId,
   );
-  const commands = [new PingCommand(), chatCommand];
+  const summaryService = new SummaryService(codex, new WebFetcherClient());
+  const summaryCommand = new SummaryCommand(
+    summaryService,
+    discordApiClient,
+    applicationId,
+  );
+  const commands = [new PingCommand(), chatCommand, summaryCommand];
   const messageHandler = new MessageHandler(
     aiService,
     discordApiClient,
@@ -72,9 +85,11 @@ export function bootstrap() {
   const log = getLogger();
   log.debug({ config }, "Config loaded");
 
-  const { aiService, redis } = createAIService();
-  const { botToken, interactionHandler, messageHandler } =
-    createDiscordDeps(aiService);
+  const { aiService, redis, codex } = createAIService();
+  const { botToken, interactionHandler, messageHandler } = createDiscordDeps(
+    aiService,
+    codex,
+  );
 
   const app = createApp({ interactionHandler, messageHandler, botToken });
 
