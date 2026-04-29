@@ -5,7 +5,7 @@ export class DiscordApiClient {
 
   constructor(private botToken: string) {}
 
-  async sendMessage(channelId: string, content: string): Promise<void> {
+  async sendMessage(channelId: string, content: string): Promise<boolean> {
     const log = getLogger();
     const url = `${this.baseUrl}/channels/${channelId}/messages`;
 
@@ -24,12 +24,16 @@ export class DiscordApiClient {
           { status: response.status, channelId },
           "Failed to send Discord message",
         );
+        return false;
       }
+
+      return true;
     } catch (e) {
       log.error(
         { err: e instanceof Error ? e.message : String(e), channelId },
         "Discord API request failed",
       );
+      return false;
     }
   }
 }
