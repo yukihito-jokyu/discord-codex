@@ -9,14 +9,12 @@ import { Router } from "../router";
 import { InteractionHandler } from "./interaction.handler";
 
 vi.mock("@/shared/utils/logger", () => ({
-  getLogger: vi
-    .fn()
-    .mockReturnValue({
-      info: vi.fn(),
-      warn: vi.fn(),
-      error: vi.fn(),
-      debug: vi.fn(),
-    }),
+  getLogger: vi.fn().mockReturnValue({
+    info: vi.fn(),
+    warn: vi.fn(),
+    error: vi.fn(),
+    debug: vi.fn(),
+  }),
 }));
 
 function createInteraction(
