@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { InteractionHandler } from "@/bot/handlers/interaction.handler";
+import type { MessageHandler } from "@/bot/handlers/message.handler";
 import type { DomainInteraction } from "@/sdk/discord/types/domain";
 
 const mockLog = {
@@ -12,9 +13,7 @@ const mockLog = {
 vi.mock("@/shared/utils/logger", () => ({ getLogger: () => mockLog }));
 
 vi.mock("@/server/middleware/verify-discord", () => ({
-  verifyDiscord: async (_c: unknown, next: () => Promise<void>) => {
-    await next();
-  },
+  verifyDiscordSignature: async () => null,
 }));
 
 const mockToDomain = vi.fn();
@@ -27,11 +26,30 @@ vi.mock("@/sdk/discord/adapter/response.adapter", () => ({
   toDiscord: (...args: unknown[]) => mockToDiscord(...args),
 }));
 
+const mockParseGatewayEvent = vi.fn();
+vi.mock("@/sdk/discord/adapter/gateway-event.adapter", () => ({
+  parseGatewayEvent: (...args: unknown[]) => mockParseGatewayEvent(...args),
+}));
+
+const mockHandleGatewayEvent = vi.fn();
+
 const { createDiscordRoute } = await import("@/server/routes/discord.route");
 
 function createMockHandler() {
   return { handle: vi.fn() } as unknown as InteractionHandler;
 }
+
+function createMockMessageHandler() {
+  return {
+    handleGatewayEvent: mockHandleGatewayEvent,
+  } as unknown as MessageHandler;
+}
+
+const testDeps = {
+  interactionHandler: createMockHandler(),
+  messageHandler: createMockMessageHandler(),
+  botToken: "test-bot-token",
+};
 
 describe("createDiscordRoute - error cases", () => {
   beforeEach(() => {
@@ -47,7 +65,7 @@ describe("createDiscordRoute - error cases", () => {
       ok: false,
       error: new Error("missing interaction id"),
     });
-    const app = createDiscordRoute({ interactionHandler: createMockHandler() });
+    const app = createDiscordRoute(testDeps);
 
     const res = await app.request("/", {
       method: "POST",
@@ -73,7 +91,10 @@ describe("createDiscordRoute - error cases", () => {
       },
     });
     vi.mocked(handler).handle = vi.fn().mockRejectedValue(new Error("boom"));
-    const app = createDiscordRoute({ interactionHandler: handler });
+    const app = createDiscordRoute({
+      ...testDeps,
+      interactionHandler: handler,
+    });
 
     const res = await app.request("/", {
       method: "POST",
@@ -95,7 +116,10 @@ describe("createDiscordRoute - invalid body", () => {
 
   it("returns 500 when body is not valid JSON", async () => {
     const handler = createMockHandler();
-    const app = createDiscordRoute({ interactionHandler: handler });
+    const app = createDiscordRoute({
+      ...testDeps,
+      interactionHandler: handler,
+    });
 
     const res = await app.request("/", {
       method: "POST",
@@ -107,7 +131,7 @@ describe("createDiscordRoute - invalid body", () => {
   });
 });
 
-describe("createDiscordRoute - success cases", () => {
+describe("createDiscordRoute - ping interaction", () => {
   beforeEach(() => {
     vi.restoreAllMocks();
     mockToDomain.mockReset();
@@ -115,7 +139,6 @@ describe("createDiscordRoute - success cases", () => {
   });
 
   it("returns 200 with pong for ping interaction", async () => {
-    const handler = createMockHandler();
     const interaction: DomainInteraction = {
       id: "1",
       type: "ping",
@@ -123,10 +146,14 @@ describe("createDiscordRoute - success cases", () => {
       userId: "",
       raw: {},
     };
+    const handler = createMockHandler();
     mockToDomain.mockReturnValue({ ok: true, value: interaction });
     vi.mocked(handler).handle = vi.fn().mockResolvedValue({ type: 1 });
     mockToDiscord.mockReturnValue({ type: 1 });
-    const app = createDiscordRoute({ interactionHandler: handler });
+    const app = createDiscordRoute({
+      ...testDeps,
+      interactionHandler: handler,
+    });
 
     const res = await app.request("/", {
       method: "POST",
@@ -138,9 +165,16 @@ describe("createDiscordRoute - success cases", () => {
     expect(handler.handle).toHaveBeenCalledWith(interaction);
     expect(mockToDiscord).toHaveBeenCalledWith({ type: 1 });
   });
+});
+
+describe("createDiscordRoute - command interaction", () => {
+  beforeEach(() => {
+    vi.restoreAllMocks();
+    mockToDomain.mockReset();
+    mockToDiscord.mockReset();
+  });
 
   it("returns 200 with command response", async () => {
-    const handler = createMockHandler();
     const interaction: DomainInteraction = {
       id: "2",
       type: "command",
@@ -150,10 +184,14 @@ describe("createDiscordRoute - success cases", () => {
       raw: {},
     };
     const domainResponse = { type: 4, data: { content: "Pong!" } };
+    const handler = createMockHandler();
     mockToDomain.mockReturnValue({ ok: true, value: interaction });
     vi.mocked(handler).handle = vi.fn().mockResolvedValue(domainResponse);
-    mockToDiscord.mockReturnValue({ type: 4, data: { content: "Pong!" } });
-    const app = createDiscordRoute({ interactionHandler: handler });
+    mockToDiscord.mockReturnValue(domainResponse);
+    const app = createDiscordRoute({
+      ...testDeps,
+      interactionHandler: handler,
+    });
 
     const res = await app.request("/", {
       method: "POST",
@@ -162,6 +200,79 @@ describe("createDiscordRoute - success cases", () => {
     });
 
     expect(res.status).toBe(200);
-    expect(await res.json()).toEqual({ type: 4, data: { content: "Pong!" } });
+    expect(await res.json()).toEqual(domainResponse);
+  });
+});
+
+describe("createDiscordRoute - gateway event routing", () => {
+  beforeEach(() => {
+    vi.restoreAllMocks();
+    mockParseGatewayEvent.mockReset();
+    mockHandleGatewayEvent.mockReset();
+    mockToDomain.mockReset();
+  });
+
+  it("routes gateway event to messageHandler", async () => {
+    const event = { type: "GATEWAY_MESSAGE_CREATE", timestamp: 1, data: {} };
+    mockParseGatewayEvent.mockReturnValue({ ok: true, value: event });
+    mockHandleGatewayEvent.mockResolvedValue(undefined);
+    const app = createDiscordRoute(testDeps);
+
+    const res = await app.request("/", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "x-discord-gateway-token": "test-bot-token",
+      },
+      body: JSON.stringify(event),
+    });
+
+    expect(res.status).toBe(200);
+    expect(await res.json()).toEqual({ ok: true });
+    expect(mockHandleGatewayEvent).toHaveBeenCalledWith(event);
+    expect(mockToDomain).not.toHaveBeenCalled();
+  });
+
+  it("returns 401 for invalid gateway token", async () => {
+    const app = createDiscordRoute(testDeps);
+
+    const res = await app.request("/", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "x-discord-gateway-token": "wrong-token",
+      },
+      body: JSON.stringify({}),
+    });
+
+    expect(res.status).toBe(401);
+  });
+});
+
+describe("createDiscordRoute - gateway invalid payload", () => {
+  beforeEach(() => {
+    vi.restoreAllMocks();
+    mockParseGatewayEvent.mockReset();
+    mockHandleGatewayEvent.mockReset();
+  });
+
+  it("returns 200 for invalid gateway event payload", async () => {
+    mockParseGatewayEvent.mockReturnValue({
+      ok: false,
+      error: { message: "bad" },
+    });
+    const app = createDiscordRoute(testDeps);
+
+    const res = await app.request("/", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "x-discord-gateway-token": "test-bot-token",
+      },
+      body: JSON.stringify({}),
+    });
+
+    expect(res.status).toBe(200);
+    expect(mockHandleGatewayEvent).not.toHaveBeenCalled();
   });
 });
