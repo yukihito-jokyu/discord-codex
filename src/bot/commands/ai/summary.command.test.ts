@@ -185,3 +185,50 @@ describe("SummaryCommand service error", () => {
     );
   });
 });
+
+describe("SummaryCommand multiple urls", () => {
+  it("extracts multiple URLs and passes them to summarize", async () => {
+    const summaryService = createMockSummaryService();
+    const discordApiClient = createMockDiscordApiClient();
+    vi.mocked(discordApiClient.getFirstMessage).mockResolvedValue(
+      "Check https://example.com/a and https://example.org/b",
+    );
+    vi.mocked(summaryService.summarize).mockResolvedValue(ok("summary ok"));
+
+    const command = new SummaryCommand(
+      summaryService,
+      discordApiClient,
+      APPLICATION_ID,
+    );
+    await command.execute(createMockInteraction());
+    await flushPromises();
+
+    expect(summaryService.summarize).toHaveBeenCalledWith([
+      "https://example.com/a",
+      "https://example.org/b",
+    ]);
+  });
+});
+
+describe("SummaryCommand duplicate urls", () => {
+  it("deduplicates identical URLs before passing to summarize", async () => {
+    const summaryService = createMockSummaryService();
+    const discordApiClient = createMockDiscordApiClient();
+    vi.mocked(discordApiClient.getFirstMessage).mockResolvedValue(
+      "https://example.com https://example.com",
+    );
+    vi.mocked(summaryService.summarize).mockResolvedValue(ok("summary ok"));
+
+    const command = new SummaryCommand(
+      summaryService,
+      discordApiClient,
+      APPLICATION_ID,
+    );
+    await command.execute(createMockInteraction());
+    await flushPromises();
+
+    expect(summaryService.summarize).toHaveBeenCalledWith([
+      "https://example.com",
+    ]);
+  });
+});
