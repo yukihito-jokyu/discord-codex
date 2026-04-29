@@ -16,6 +16,9 @@ vi.mock("@/shared/utils/logger", () => ({
 
 const mockCreateApp = vi.fn().mockReturnValue({ fetch: vi.fn() });
 const mockStart = vi.fn().mockResolvedValue(undefined);
+const mockStop = vi.fn();
+const mockRedisDisconnect = vi.fn().mockResolvedValue(undefined);
+const mockRedisConnect = vi.fn().mockResolvedValue(undefined);
 
 function setupMocks(
   config: Record<string, unknown>,
@@ -40,13 +43,16 @@ function setupMocks(
   vi.doMock("@/server/gateway/discord.gateway", () => ({
     // biome-ignore lint/complexity/useArrowFunction: constructor mock requires function
     DiscordGateway: vi.fn().mockImplementation(function () {
-      return { start: mockStart, stop: vi.fn() };
+      return { start: mockStart, stop: mockStop };
     }),
   }));
   vi.doMock("@/infrastructure/redis/redis.client", () => ({
     // biome-ignore lint/complexity/useArrowFunction: constructor mock requires function
     RedisClient: vi.fn().mockImplementation(function () {
-      return { connect: vi.fn().mockResolvedValue(undefined) };
+      return {
+        connect: mockRedisConnect,
+        disconnect: mockRedisDisconnect,
+      };
     }),
   }));
   vi.doMock("@/ai/client/codex.client", () => ({
@@ -97,15 +103,17 @@ describe("bootstrap result", () => {
   });
 });
 
-describe("bootstrap gateway", () => {
+describe("bootstrap shutdown", () => {
   beforeEach(() => {
     vi.resetModules();
     vi.restoreAllMocks();
     mockCreateApp.mockClear();
     mockCreateApp.mockReturnValue({ fetch: vi.fn() });
+    mockRedisDisconnect.mockClear();
+    mockStop.mockClear();
   });
 
-  it("returns null gateway when DISCORD_BOT_TOKEN is not set", async () => {
+  it("returns shutdown function", async () => {
     setupMocks({
       bot: { defaultModel: "codex-mini", maxTokens: 4096, timeoutMs: 30000 },
       server: { port: 3000 },
@@ -116,10 +124,10 @@ describe("bootstrap gateway", () => {
 
     const result = bootstrap();
 
-    expect(result.gateway).toBeNull();
+    expect(typeof result.shutdown).toBe("function");
   });
 
-  it("returns gateway when DISCORD_BOT_TOKEN is set", async () => {
+  it("shutdown disconnects Redis and stops Gateway", async () => {
     setupMocks(
       {
         bot: { defaultModel: "codex-mini", maxTokens: 4096, timeoutMs: 30000 },
@@ -132,10 +140,26 @@ describe("bootstrap gateway", () => {
     const { bootstrap } = await import("@/app/bootstrap");
 
     const result = bootstrap();
+    await result.shutdown();
 
-    expect(result.gateway).not.toBeNull();
-    expect(result.gateway).toHaveProperty("start");
-    expect(result.gateway).toHaveProperty("stop");
+    expect(mockRedisDisconnect).toHaveBeenCalled();
+    expect(mockStop).toHaveBeenCalled();
+  });
+
+  it("shutdown works without Gateway", async () => {
+    setupMocks({
+      bot: { defaultModel: "codex-mini", maxTokens: 4096, timeoutMs: 30000 },
+      server: { port: 3000 },
+      logging: { level: "info" },
+    });
+
+    const { bootstrap } = await import("@/app/bootstrap");
+
+    const result = bootstrap();
+    await result.shutdown();
+
+    expect(mockRedisDisconnect).toHaveBeenCalled();
+    expect(mockStop).not.toHaveBeenCalled();
   });
 });
 
