@@ -48,5 +48,11 @@ export function bootstrap() {
 
   log.info({ port: config.server.port }, "Bootstrap completed");
 
-  return { app, port: config.server.port, gateway };
+  const shutdown = async () => {
+    log.info("Shutting down");
+    await redis.disconnect();
+    gateway?.stop();
+  };
+
+  return { app, port: config.server.port, shutdown };
 }
