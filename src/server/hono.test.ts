@@ -66,9 +66,7 @@ describe("createApp with deps", () => {
 
   it("mounts discord route when deps are provided", async () => {
     vi.doMock("@/server/middleware/verify-discord", () => ({
-      verifyDiscord: async (_c: unknown, next: () => Promise<void>) => {
-        await next();
-      },
+      verifyDiscordSignature: async () => null,
     }));
     vi.doMock("@/sdk/discord/adapter/interaction.adapter", () => ({
       toDomain: () => ({
@@ -84,8 +82,15 @@ describe("createApp with deps", () => {
     const mockHandler = {
       handle: vi.fn().mockResolvedValue({ type: 1 }),
     };
+    const mockMessageHandler = {
+      handleGatewayEvent: vi.fn(),
+    };
 
-    const app = createApp({ interactionHandler: mockHandler as never });
+    const app = createApp({
+      interactionHandler: mockHandler as never,
+      messageHandler: mockMessageHandler as never,
+      botToken: "test-token",
+    });
     const res = await app.request("/api/webhooks/discord", {
       method: "POST",
       headers: { "Content-Type": "application/json" },

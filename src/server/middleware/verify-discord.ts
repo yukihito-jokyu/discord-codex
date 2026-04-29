@@ -1,10 +1,12 @@
 import { etc, verifyAsync } from "@noble/ed25519";
-import type { MiddlewareHandler } from "hono";
+import type { Context, MiddlewareHandler } from "hono";
 import { env } from "@/app/config/env";
 import { HTTP_UNAUTHORIZED } from "@/shared/utils/http-status";
 import { getLogger } from "@/shared/utils/logger";
 
-export const verifyDiscord: MiddlewareHandler = async (c, next) => {
+export async function verifyDiscordSignature(
+  c: Context,
+): Promise<Response | null> {
   const log = getLogger();
   const publicKey = env.DISCORD_PUBLIC_KEY;
 
@@ -45,5 +47,11 @@ export const verifyDiscord: MiddlewareHandler = async (c, next) => {
   }
 
   log.debug("Discord signature verification passed");
+  return null;
+}
+
+export const verifyDiscord: MiddlewareHandler = async (c, next) => {
+  const error = await verifyDiscordSignature(c);
+  if (error) return error;
   await next();
 };

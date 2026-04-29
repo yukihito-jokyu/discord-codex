@@ -5,11 +5,31 @@ import { env } from "@/app/config/env";
 import { ChatCommand } from "@/bot/commands/ai/chat.command";
 import { PingCommand } from "@/bot/commands/utility/ping.command";
 import { InteractionHandler } from "@/bot/handlers/interaction.handler";
+import { MessageHandler } from "@/bot/handlers/message.handler";
 import { Router } from "@/bot/router";
+import { DiscordApiClient } from "@/infrastructure/discord/discord-api.client";
 import { RedisClient } from "@/infrastructure/redis/redis.client";
 import { DiscordGateway } from "@/server/gateway/discord.gateway";
 import { createApp } from "@/server/hono";
 import { createLogger, getLogger } from "@/shared/utils/logger";
+
+function initDiscord(aiService: AIService) {
+  const botToken = env.DISCORD_BOT_TOKEN;
+  const applicationId = env.DISCORD_APPLICATION_ID;
+  if (!botToken) {
+    throw new Error("DISCORD_BOT_TOKEN is required");
+  }
+  if (!applicationId) {
+    throw new Error("DISCORD_APPLICATION_ID is required");
+  }
+  const discordApiClient = new DiscordApiClient(botToken);
+  const messageHandler = new MessageHandler(
+    aiService,
+    discordApiClient,
+    applicationId,
+  );
+  return { botToken, applicationId, discordApiClient, messageHandler };
+}
 
 export function bootstrap() {
   const config = loadConfig();
@@ -35,23 +55,22 @@ export function bootstrap() {
   const router = new Router(commands);
   const interactionHandler = new InteractionHandler(router);
 
-  const app = createApp({ interactionHandler });
+  const { botToken, messageHandler } = initDiscord(aiService);
 
-  let gateway: DiscordGateway | null = null;
-  if (env.DISCORD_BOT_TOKEN) {
-    gateway = new DiscordGateway();
-    const webhookUrl = `http://localhost:${config.server.port}/api/webhooks/discord`;
-    gateway.start(webhookUrl).catch((err) => {
-      log.error({ err: String(err) }, "Gateway startup failed");
-    });
-  }
+  const app = createApp({ interactionHandler, messageHandler, botToken });
+
+  const gateway = new DiscordGateway();
+  const webhookUrl = `http://localhost:${config.server.port}/api/webhooks/discord`;
+  gateway.start(webhookUrl).catch((err) => {
+    log.error({ err: String(err) }, "Gateway startup failed");
+  });
 
   log.info({ port: config.server.port }, "Bootstrap completed");
 
   const shutdown = async () => {
     log.info("Shutting down");
     await redis.disconnect();
-    gateway?.stop();
+    gateway.stop();
   };
 
   return { app, port: config.server.port, shutdown };
