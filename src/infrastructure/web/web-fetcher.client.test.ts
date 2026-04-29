@@ -58,6 +58,24 @@ describe("WebFetcherClient success", () => {
       expect(result.value).toContain("...");
     }
   });
+
+  it("does not truncate content at exactly max length", async () => {
+    const exactLengthText = "a".repeat(5000);
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue({
+        ok: true,
+        text: () => Promise.resolve(exactLengthText),
+      }),
+    );
+
+    const result = await client.fetchContent("https://example.com/exact");
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.value).toBe(exactLengthText);
+      expect(result.value).not.toContain("...");
+    }
+  });
 });
 
 describe("WebFetcherClient errors", () => {
