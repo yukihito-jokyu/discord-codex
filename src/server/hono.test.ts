@@ -4,6 +4,10 @@ vi.mock("@/shared/utils/logger", () => ({
   getLogger: vi.fn().mockReturnValue({ info: vi.fn(), warn: vi.fn() }),
 }));
 
+vi.mock("@/app/config/env", () => ({
+  env: { NODE_ENV: "test" },
+}));
+
 describe("createApp without deps", () => {
   beforeEach(() => {
     vi.resetModules();

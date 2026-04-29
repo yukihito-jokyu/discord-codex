@@ -30,6 +30,10 @@ export function createDiscordRoute(deps: {
       }
 
       const raw = await c.req.json();
+      log.debug(
+        { eventType: (raw as Record<string, unknown>)?.type },
+        "Gateway event received",
+      );
       const eventResult = parseGatewayEvent(raw);
 
       if (!eventResult.ok) {
