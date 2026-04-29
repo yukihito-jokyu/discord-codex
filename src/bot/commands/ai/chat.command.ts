@@ -80,7 +80,7 @@ export class ChatCommand implements Command {
       const threadId = await this.discordApiClient.createThreadFromMessage(
         channelId,
         messageId,
-        userMessage,
+        userMessage.slice(0, 100),
       );
       if (threadId) targetChannelId = threadId;
     }

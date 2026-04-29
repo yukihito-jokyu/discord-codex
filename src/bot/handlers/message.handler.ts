@@ -106,7 +106,7 @@ export class MessageHandler {
     const threadId = await this.discordApiClient.createThreadFromMessage(
       message.channel_id,
       message.id,
-      threadName,
+      threadName.slice(0, 100),
     );
     return threadId ?? message.channel_id;
   }
