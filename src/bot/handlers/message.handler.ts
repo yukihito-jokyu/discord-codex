@@ -56,6 +56,15 @@ export class MessageHandler {
       return;
     }
 
-    await this.discordApiClient.sendMessage(message.channel_id, result.value);
+    const sent = await this.discordApiClient.sendMessage(
+      message.channel_id,
+      result.value,
+    );
+    if (!sent) {
+      log.error(
+        { channelId: message.channel_id },
+        "Failed to send AI response to Discord",
+      );
+    }
   }
 }

@@ -172,6 +172,19 @@ describe("MessageHandler handleGatewayEvent - errors", () => {
     expect(mockSendMessage).not.toHaveBeenCalled();
   });
 
+  it("logs error when sendMessage returns false", async () => {
+    mockChat.mockResolvedValue({ ok: true, value: "AI response" });
+    mockSendMessage.mockResolvedValue(false);
+
+    await handler.handleGatewayEvent(makeMentionEvent());
+
+    expect(mockSendMessage).toHaveBeenCalledWith("ch-1", "AI response");
+    expect(mockLogError).toHaveBeenCalledWith(
+      { channelId: "ch-1" },
+      "Failed to send AI response to Discord",
+    );
+  });
+
   it("logs warning when message data extraction fails", async () => {
     const event: GatewayEvent = {
       type: "GATEWAY_MESSAGE_CREATE",
