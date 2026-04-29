@@ -8,20 +8,25 @@ export interface ChatResult {
 
 export class CodexClient {
   private codex: Codex;
+  private model: string | undefined;
 
-  constructor(apiKey: string) {
-    this.codex = new Codex({ apiKey });
+  constructor(apiKey: string, options?: { baseUrl?: string; model?: string }) {
+    this.codex = new Codex({ apiKey, baseUrl: options?.baseUrl });
+    this.model = options?.model;
   }
 
   async chat(threadId: string | null, input: Input): Promise<ChatResult> {
+    const threadOptions = {
+      model: this.model ?? "codex-mini",
+      sandboxMode: "read-only" as const,
+      networkAccessEnabled: true,
+      webSearchMode: "live" as const,
+      skipGitRepoCheck: true,
+    };
+
     const thread = threadId
-      ? this.codex.resumeThread(threadId)
-      : this.codex.startThread({
-          model: "codex-mini",
-          sandboxMode: "read-only",
-          networkAccessEnabled: true,
-          webSearchMode: "live",
-        });
+      ? this.codex.resumeThread(threadId, threadOptions)
+      : this.codex.startThread(threadOptions);
 
     const turn = await thread.run(input);
     const id = thread.id;
