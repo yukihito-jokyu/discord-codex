@@ -86,3 +86,87 @@ describe("env REDIS_URL", () => {
     expect(env.REDIS_URL).toBe("");
   });
 });
+
+describe("env OPENAI_API_KEY", () => {
+  setupEnv();
+
+  it("parses OPENAI_API_KEY when set", async () => {
+    process.env.NODE_ENV = "test";
+    process.env.OPENAI_API_KEY = "sk-test-key";
+
+    const { env } = await import("@/app/config/env");
+
+    expect(env.OPENAI_API_KEY).toBe("sk-test-key");
+  });
+
+  it("returns undefined when not set", async () => {
+    delete process.env.OPENAI_API_KEY;
+
+    const { env } = await import("@/app/config/env");
+
+    expect(env.OPENAI_API_KEY).toBeUndefined();
+  });
+});
+
+describe("env DISCORD_PUBLIC_KEY", () => {
+  setupEnv();
+
+  it("parses DISCORD_PUBLIC_KEY when set", async () => {
+    process.env.NODE_ENV = "test";
+    process.env.DISCORD_PUBLIC_KEY = "abc123";
+
+    const { env } = await import("@/app/config/env");
+
+    expect(env.DISCORD_PUBLIC_KEY).toBe("abc123");
+  });
+
+  it("returns undefined when not set", async () => {
+    delete process.env.DISCORD_PUBLIC_KEY;
+
+    const { env } = await import("@/app/config/env");
+
+    expect(env.DISCORD_PUBLIC_KEY).toBeUndefined();
+  });
+});
+
+describe("env DISCORD_BOT_TOKEN", () => {
+  setupEnv();
+
+  it("parses DISCORD_BOT_TOKEN when set", async () => {
+    process.env.NODE_ENV = "test";
+    process.env.DISCORD_BOT_TOKEN = "bot-token";
+
+    const { env } = await import("@/app/config/env");
+
+    expect(env.DISCORD_BOT_TOKEN).toBe("bot-token");
+  });
+
+  it("returns undefined when not set", async () => {
+    delete process.env.DISCORD_BOT_TOKEN;
+
+    const { env } = await import("@/app/config/env");
+
+    expect(env.DISCORD_BOT_TOKEN).toBeUndefined();
+  });
+});
+
+describe("env DISCORD_APPLICATION_ID", () => {
+  setupEnv();
+
+  it("parses DISCORD_APPLICATION_ID when set", async () => {
+    process.env.NODE_ENV = "test";
+    process.env.DISCORD_APPLICATION_ID = "app-id";
+
+    const { env } = await import("@/app/config/env");
+
+    expect(env.DISCORD_APPLICATION_ID).toBe("app-id");
+  });
+
+  it("returns undefined when not set", async () => {
+    delete process.env.DISCORD_APPLICATION_ID;
+
+    const { env } = await import("@/app/config/env");
+
+    expect(env.DISCORD_APPLICATION_ID).toBeUndefined();
+  });
+});
