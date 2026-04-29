@@ -8,6 +8,17 @@ import type { Command } from "../commands/command.interface";
 import { Router } from "../router";
 import { InteractionHandler } from "./interaction.handler";
 
+vi.mock("@/shared/utils/logger", () => ({
+  getLogger: vi
+    .fn()
+    .mockReturnValue({
+      info: vi.fn(),
+      warn: vi.fn(),
+      error: vi.fn(),
+      debug: vi.fn(),
+    }),
+}));
+
 function createInteraction(
   overrides: Partial<DomainInteraction> = {},
 ): DomainInteraction {
