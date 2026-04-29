@@ -37,7 +37,10 @@ export function createDiscordRoute(deps: {
           { error: eventResult.error.message },
           "Invalid gateway event payload",
         );
-        return c.json({ ok: true }, HTTP_OK);
+        return c.json(
+          { ok: false, error: eventResult.error.message },
+          HTTP_BAD_REQUEST,
+        );
       }
 
       await deps.messageHandler.handleGatewayEvent(eventResult.value);

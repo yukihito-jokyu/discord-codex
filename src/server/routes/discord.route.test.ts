@@ -256,7 +256,7 @@ describe("createDiscordRoute - gateway invalid payload", () => {
     mockHandleGatewayEvent.mockReset();
   });
 
-  it("returns 200 for invalid gateway event payload", async () => {
+  it("returns 400 for invalid gateway event payload", async () => {
     mockParseGatewayEvent.mockReturnValue({
       ok: false,
       error: { message: "bad" },
@@ -272,7 +272,8 @@ describe("createDiscordRoute - gateway invalid payload", () => {
       body: JSON.stringify({}),
     });
 
-    expect(res.status).toBe(200);
+    expect(res.status).toBe(400);
+    expect(await res.json()).toEqual({ ok: false, error: "bad" });
     expect(mockHandleGatewayEvent).not.toHaveBeenCalled();
   });
 });
