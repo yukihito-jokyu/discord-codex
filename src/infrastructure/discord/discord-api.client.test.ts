@@ -382,3 +382,129 @@ describe("DiscordApiClient registerGuildCommands error", () => {
     );
   });
 });
+
+describe("DiscordApiClient getFirstMessage success", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it("returns content of the oldest message (smallest ID)", async () => {
+    mockFetch.mockResolvedValue({
+      ok: true,
+      json: () =>
+        Promise.resolve([
+          { id: "200", content: "second message" },
+          { id: "100", content: "first message" },
+          { id: "300", content: "third message" },
+        ]),
+    });
+    const client = new DiscordApiClient("test-token");
+
+    const result = await client.getFirstMessage("ch-123");
+
+    expect(result).toBe("first message");
+  });
+
+  it("calls fetch with correct URL and headers", async () => {
+    mockFetch.mockResolvedValue({
+      ok: true,
+      json: () => Promise.resolve([{ id: "100", content: "hello" }]),
+    });
+    const client = new DiscordApiClient("test-token");
+
+    await client.getFirstMessage("ch-456");
+
+    expect(mockFetch).toHaveBeenCalledWith(
+      "https://discord.com/api/v10/channels/ch-456/messages?limit=50",
+      {
+        headers: { Authorization: "Bot test-token" },
+      },
+    );
+  });
+});
+
+describe("DiscordApiClient getFirstMessage boundary", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it("returns null when messages array is empty", async () => {
+    mockFetch.mockResolvedValue({
+      ok: true,
+      json: () => Promise.resolve([]),
+    });
+    const client = new DiscordApiClient("test-token");
+
+    const result = await client.getFirstMessage("ch-123");
+
+    expect(result).toBeNull();
+  });
+
+  it("returns content when only one message exists", async () => {
+    mockFetch.mockResolvedValue({
+      ok: true,
+      json: () => Promise.resolve([{ id: "100", content: "only message" }]),
+    });
+    const client = new DiscordApiClient("test-token");
+
+    const result = await client.getFirstMessage("ch-123");
+
+    expect(result).toBe("only message");
+  });
+
+  it("returns null when oldest message content is undefined", async () => {
+    mockFetch.mockResolvedValue({
+      ok: true,
+      json: () => Promise.resolve([{ id: "100" }]),
+    });
+    const client = new DiscordApiClient("test-token");
+
+    const result = await client.getFirstMessage("ch-123");
+
+    expect(result).toBeNull();
+  });
+
+  it("returns empty string when oldest message content is empty string", async () => {
+    mockFetch.mockResolvedValue({
+      ok: true,
+      json: () => Promise.resolve([{ id: "100", content: "" }]),
+    });
+    const client = new DiscordApiClient("test-token");
+
+    const result = await client.getFirstMessage("ch-123");
+
+    expect(result).toBe("");
+  });
+});
+
+describe("DiscordApiClient getFirstMessage error", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it("returns null on API error response", async () => {
+    mockFetch.mockResolvedValue({ ok: false, status: 403 });
+    const client = new DiscordApiClient("test-token");
+
+    const result = await client.getFirstMessage("ch-123");
+
+    expect(result).toBeNull();
+    expect(mockLogError).toHaveBeenCalledWith(
+      { status: 403, channelId: "ch-123" },
+      "Failed to fetch messages",
+    );
+  });
+
+  it("returns null on network error", async () => {
+    mockFetch.mockRejectedValue(new Error("ECONNREFUSED"));
+    const client = new DiscordApiClient("test-token");
+
+    const result = await client.getFirstMessage("ch-123");
+
+    expect(result).toBeNull();
+    expect(mockLogError).toHaveBeenCalledWith(
+      { err: "ECONNREFUSED", channelId: "ch-123" },
+      "Message fetch request failed",
+    );
+  });
+});

@@ -75,6 +75,28 @@ function setupMocks(
       return {};
     }),
   }));
+  vi.doMock("@/ai/services/summary.service", () => ({
+    // biome-ignore lint/complexity/useArrowFunction: constructor mock requires function expression
+    SummaryService: vi.fn().mockImplementation(function () {
+      return {};
+    }),
+  }));
+  vi.doMock("@/bot/commands/ai/summary.command", () => ({
+    // biome-ignore lint/complexity/useArrowFunction: constructor mock requires function expression
+    SummaryCommand: vi.fn().mockImplementation(function () {
+      return {
+        name: "summary",
+        definition: { description: "Summary" },
+        execute: vi.fn(),
+      };
+    }),
+  }));
+  vi.doMock("@/infrastructure/web/web-fetcher.client", () => ({
+    // biome-ignore lint/complexity/useArrowFunction: constructor mock requires function expression
+    WebFetcherClient: vi.fn().mockImplementation(function () {
+      return {};
+    }),
+  }));
 }
 
 describe("bootstrap result", () => {
@@ -370,6 +392,7 @@ describe("bootstrap guild command registration", () => {
       expect.arrayContaining([
         expect.objectContaining({ name: "ping" }),
         expect.objectContaining({ name: "chat" }),
+        expect.objectContaining({ name: "summary" }),
       ]),
     );
   });
