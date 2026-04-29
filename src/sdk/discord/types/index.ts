@@ -11,3 +11,10 @@ export type {
   DomainResponse,
   InteractionType,
 } from "./domain";
+
+export type {
+  GatewayEvent,
+  GatewayMessageAuthor,
+  GatewayMessageData,
+  GatewayMessageMention,
+} from "./gateway";
