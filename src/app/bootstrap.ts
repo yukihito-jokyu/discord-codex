@@ -5,7 +5,9 @@ import { env } from "@/app/config/env";
 import { ChatCommand } from "@/bot/commands/ai/chat.command";
 import { PingCommand } from "@/bot/commands/utility/ping.command";
 import { InteractionHandler } from "@/bot/handlers/interaction.handler";
+import { MessageHandler } from "@/bot/handlers/message.handler";
 import { Router } from "@/bot/router";
+import { DiscordApiClient } from "@/infrastructure/discord/discord-api.client";
 import { RedisClient } from "@/infrastructure/redis/redis.client";
 import { DiscordGateway } from "@/server/gateway/discord.gateway";
 import { createApp } from "@/server/hono";
@@ -35,7 +37,16 @@ export function bootstrap() {
   const router = new Router(commands);
   const interactionHandler = new InteractionHandler(router);
 
-  const app = createApp({ interactionHandler });
+  const botToken = env.DISCORD_BOT_TOKEN ?? "";
+  const applicationId = env.DISCORD_APPLICATION_ID ?? "";
+  const discordApiClient = new DiscordApiClient(botToken);
+  const messageHandler = new MessageHandler(
+    aiService,
+    discordApiClient,
+    applicationId,
+  );
+
+  const app = createApp({ interactionHandler, messageHandler, botToken });
 
   let gateway: DiscordGateway | null = null;
   if (env.DISCORD_BOT_TOKEN) {
