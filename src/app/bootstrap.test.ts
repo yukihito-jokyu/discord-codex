@@ -32,8 +32,8 @@ function setupMocks(
       NODE_ENV: "test",
       OPENAI_API_KEY: "test-key",
       DISCORD_PUBLIC_KEY: "test-pk",
-      DISCORD_BOT_TOKEN: undefined,
-      DISCORD_APPLICATION_ID: undefined,
+      DISCORD_BOT_TOKEN: "test-bot-token",
+      DISCORD_APPLICATION_ID: "test-app-id",
       ...envOverrides,
     },
   }));
@@ -128,25 +128,6 @@ describe("bootstrap shutdown", () => {
   });
 
   it("shutdown disconnects Redis and stops Gateway", async () => {
-    setupMocks(
-      {
-        bot: { defaultModel: "codex-mini", maxTokens: 4096, timeoutMs: 30000 },
-        server: { port: 3000 },
-        logging: { level: "info" },
-      },
-      { DISCORD_BOT_TOKEN: "test-bot-token" },
-    );
-
-    const { bootstrap } = await import("@/app/bootstrap");
-
-    const result = bootstrap();
-    await result.shutdown();
-
-    expect(mockRedisDisconnect).toHaveBeenCalled();
-    expect(mockStop).toHaveBeenCalled();
-  });
-
-  it("shutdown works without Gateway", async () => {
     setupMocks({
       bot: { defaultModel: "codex-mini", maxTokens: 4096, timeoutMs: 30000 },
       server: { port: 3000 },
@@ -159,7 +140,23 @@ describe("bootstrap shutdown", () => {
     await result.shutdown();
 
     expect(mockRedisDisconnect).toHaveBeenCalled();
-    expect(mockStop).not.toHaveBeenCalled();
+    expect(mockStop).toHaveBeenCalled();
+  });
+
+  it("shutdown always stops Gateway", async () => {
+    setupMocks({
+      bot: { defaultModel: "codex-mini", maxTokens: 4096, timeoutMs: 30000 },
+      server: { port: 3000 },
+      logging: { level: "info" },
+    });
+
+    const { bootstrap } = await import("@/app/bootstrap");
+
+    const result = bootstrap();
+    await result.shutdown();
+
+    expect(mockRedisDisconnect).toHaveBeenCalled();
+    expect(mockStop).toHaveBeenCalled();
   });
 });
 
