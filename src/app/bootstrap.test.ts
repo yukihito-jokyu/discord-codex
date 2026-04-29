@@ -19,6 +19,7 @@ const mockStart = vi.fn().mockResolvedValue(undefined);
 const mockStop = vi.fn();
 const mockRedisDisconnect = vi.fn().mockResolvedValue(undefined);
 const mockRedisConnect = vi.fn().mockResolvedValue(undefined);
+const mockRegisterGuildCommands = vi.fn().mockResolvedValue(undefined);
 
 function setupMocks(
   config: Record<string, unknown>,
@@ -31,9 +32,13 @@ function setupMocks(
     env: {
       NODE_ENV: "test",
       OPENAI_API_KEY: "test-key",
+      CODEX_API_KEY: undefined,
+      CODEX_BASE_URL: undefined,
+      CODEX_MODEL: undefined,
       DISCORD_PUBLIC_KEY: "test-pk",
       DISCORD_BOT_TOKEN: "test-bot-token",
       DISCORD_APPLICATION_ID: "test-app-id",
+      DISCORD_GUILD_ID: undefined,
       ...envOverrides,
     },
   }));
@@ -41,13 +46,13 @@ function setupMocks(
     createApp: mockCreateApp,
   }));
   vi.doMock("@/server/gateway/discord.gateway", () => ({
-    // biome-ignore lint/complexity/useArrowFunction: constructor mock requires function
+    // biome-ignore lint/complexity/useArrowFunction: constructor mock requires function expression
     DiscordGateway: vi.fn().mockImplementation(function () {
       return { start: mockStart, stop: mockStop };
     }),
   }));
   vi.doMock("@/infrastructure/redis/redis.client", () => ({
-    // biome-ignore lint/complexity/useArrowFunction: constructor mock requires function
+    // biome-ignore lint/complexity/useArrowFunction: constructor mock requires function expression
     RedisClient: vi.fn().mockImplementation(function () {
       return {
         connect: mockRedisConnect,
@@ -55,8 +60,17 @@ function setupMocks(
       };
     }),
   }));
+  vi.doMock("@/infrastructure/discord/discord-api.client", () => ({
+    // biome-ignore lint/complexity/useArrowFunction: constructor mock requires function expression
+    DiscordApiClient: vi.fn().mockImplementation(function () {
+      return {
+        registerGuildCommands: mockRegisterGuildCommands,
+        sendMessage: vi.fn(),
+      };
+    }),
+  }));
   vi.doMock("@/ai/client/codex.client", () => ({
-    // biome-ignore lint/complexity/useArrowFunction: constructor mock requires function
+    // biome-ignore lint/complexity/useArrowFunction: constructor mock requires function expression
     CodexClient: vi.fn().mockImplementation(function () {
       return {};
     }),
@@ -222,18 +236,158 @@ describe("bootstrap error", () => {
     expect(() => bootstrap()).toThrow("config error");
   });
 
-  it("throws when OPENAI_API_KEY is not set", async () => {
+  it("throws when OPENAI_API_KEY and CODEX_API_KEY are not set", async () => {
     setupMocks(
       {
         bot: { defaultModel: "codex-mini", maxTokens: 4096, timeoutMs: 30000 },
         server: { port: 3000 },
         logging: { level: "info" },
       },
-      { OPENAI_API_KEY: undefined },
+      { OPENAI_API_KEY: undefined, CODEX_API_KEY: undefined },
     );
 
     const { bootstrap } = await import("@/app/bootstrap");
 
-    expect(() => bootstrap()).toThrow("OPENAI_API_KEY is required");
+    expect(() => bootstrap()).toThrow(
+      "CODEX_API_KEY or OPENAI_API_KEY is required",
+    );
+  });
+});
+
+describe("bootstrap API key selection", () => {
+  beforeEach(() => {
+    vi.resetModules();
+    vi.restoreAllMocks();
+    mockCreateApp.mockClear();
+    mockCreateApp.mockReturnValue({ fetch: vi.fn() });
+  });
+
+  it("prefers CODEX_API_KEY over OPENAI_API_KEY", async () => {
+    setupMocks(
+      {
+        bot: { defaultModel: "codex-mini", maxTokens: 4096, timeoutMs: 30000 },
+        server: { port: 3000 },
+        logging: { level: "info" },
+      },
+      { CODEX_API_KEY: "codex-key", OPENAI_API_KEY: "openai-key" },
+    );
+
+    const { CodexClient } = await import("@/ai/client/codex.client");
+    const { bootstrap } = await import("@/app/bootstrap");
+
+    bootstrap();
+
+    expect(CodexClient).toHaveBeenCalledWith(
+      "codex-key",
+      expect.objectContaining({ baseUrl: undefined, model: undefined }),
+    );
+  });
+
+  it("falls back to OPENAI_API_KEY when CODEX_API_KEY is not set", async () => {
+    setupMocks(
+      {
+        bot: { defaultModel: "codex-mini", maxTokens: 4096, timeoutMs: 30000 },
+        server: { port: 3000 },
+        logging: { level: "info" },
+      },
+      { CODEX_API_KEY: undefined, OPENAI_API_KEY: "openai-key" },
+    );
+
+    const { CodexClient } = await import("@/ai/client/codex.client");
+    const { bootstrap } = await import("@/app/bootstrap");
+
+    bootstrap();
+
+    expect(CodexClient).toHaveBeenCalledWith(
+      "openai-key",
+      expect.objectContaining({ baseUrl: undefined, model: undefined }),
+    );
+  });
+});
+
+describe("bootstrap CodexClient options", () => {
+  beforeEach(() => {
+    vi.resetModules();
+    vi.restoreAllMocks();
+    mockCreateApp.mockClear();
+    mockCreateApp.mockReturnValue({ fetch: vi.fn() });
+  });
+
+  it("passes CODEX_BASE_URL and CODEX_MODEL to CodexClient", async () => {
+    setupMocks(
+      {
+        bot: { defaultModel: "codex-mini", maxTokens: 4096, timeoutMs: 30000 },
+        server: { port: 3000 },
+        logging: { level: "info" },
+      },
+      {
+        CODEX_BASE_URL: "https://custom.api",
+        CODEX_MODEL: "custom-model",
+      },
+    );
+
+    const { CodexClient } = await import("@/ai/client/codex.client");
+    const { bootstrap } = await import("@/app/bootstrap");
+
+    bootstrap();
+
+    expect(CodexClient).toHaveBeenCalledWith(
+      "test-key",
+      expect.objectContaining({
+        baseUrl: "https://custom.api",
+        model: "custom-model",
+      }),
+    );
+  });
+});
+
+describe("bootstrap guild command registration", () => {
+  beforeEach(() => {
+    vi.resetModules();
+    vi.restoreAllMocks();
+    mockCreateApp.mockClear();
+    mockCreateApp.mockReturnValue({ fetch: vi.fn() });
+    mockRegisterGuildCommands.mockClear();
+  });
+
+  it("calls registerGuildCommands when DISCORD_GUILD_ID is set", async () => {
+    setupMocks(
+      {
+        bot: { defaultModel: "codex-mini", maxTokens: 4096, timeoutMs: 30000 },
+        server: { port: 3000 },
+        logging: { level: "info" },
+      },
+      { DISCORD_GUILD_ID: "guild-123" },
+    );
+
+    const { bootstrap } = await import("@/app/bootstrap");
+
+    bootstrap();
+
+    expect(mockRegisterGuildCommands).toHaveBeenCalledWith(
+      "test-app-id",
+      "guild-123",
+      expect.arrayContaining([
+        expect.objectContaining({ name: "ping" }),
+        expect.objectContaining({ name: "chat" }),
+      ]),
+    );
+  });
+
+  it("does not call registerGuildCommands when DISCORD_GUILD_ID is not set", async () => {
+    setupMocks(
+      {
+        bot: { defaultModel: "codex-mini", maxTokens: 4096, timeoutMs: 30000 },
+        server: { port: 3000 },
+        logging: { level: "info" },
+      },
+      { DISCORD_GUILD_ID: undefined },
+    );
+
+    const { bootstrap } = await import("@/app/bootstrap");
+
+    bootstrap();
+
+    expect(mockRegisterGuildCommands).not.toHaveBeenCalled();
   });
 });
