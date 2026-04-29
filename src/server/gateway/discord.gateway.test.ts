@@ -23,6 +23,7 @@ vi.mock("@/app/config/env", () => ({
 
 const mockStartGatewayListener = vi.fn().mockResolvedValue(new Response());
 const mockCreateDiscordAdapter = vi.fn().mockReturnValue({
+  initialize: vi.fn().mockResolvedValue(undefined),
   startGatewayListener: mockStartGatewayListener,
 });
 
@@ -110,16 +111,18 @@ describe("DiscordGateway - start success", () => {
     const gw = new DiscordGateway();
     await gw.start("http://localhost:3000/api/webhooks/discord");
 
-    expect(mockCreateDiscordAdapter).toHaveBeenCalledWith({
-      botToken: "test-token",
-      publicKey: "test-key",
-      applicationId: "test-app-id",
-    });
+    expect(mockCreateDiscordAdapter).toHaveBeenCalledWith(
+      expect.objectContaining({
+        botToken: "test-token",
+        publicKey: "test-key",
+        applicationId: "test-app-id",
+      }),
+    );
 
     const [options, durationMs, signal, url] =
       mockStartGatewayListener.mock.calls[0];
     expect(typeof options.waitUntil).toBe("function");
-    expect(durationMs).toBeUndefined();
+    expect(durationMs).toBe(86_400_000);
     expect(signal).toBeInstanceOf(AbortSignal);
     expect(url).toBe("http://localhost:3000/api/webhooks/discord");
   });
