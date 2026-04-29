@@ -337,3 +337,63 @@ describe("AIService chat empty thread ID from Redis", () => {
     );
   });
 });
+
+describe("AIService linkThreadChannel", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it("copies thread mapping to thread channel with TTL", async () => {
+    mockRedisGet.mockResolvedValue("thread-abc");
+    mockRedisSet.mockResolvedValue(undefined);
+    const service = await createService();
+
+    await service.linkThreadChannel("channel-orig", "thread-ch");
+
+    expect(mockRedisGet).toHaveBeenCalledWith("thread:channel-orig");
+    expect(mockRedisSet).toHaveBeenCalledWith(
+      "thread:thread-ch",
+      "thread-abc",
+      {
+        ttlMs: 86400000,
+      },
+    );
+  });
+
+  it("does not call redis.set when original channel has no thread mapping", async () => {
+    mockRedisGet.mockResolvedValue(null);
+    const service = await createService();
+
+    await service.linkThreadChannel("channel-orig", "thread-ch");
+
+    expect(mockRedisSet).not.toHaveBeenCalled();
+  });
+
+  it("does not call redis.set when thread ID is empty string", async () => {
+    mockRedisGet.mockResolvedValue("");
+    const service = await createService();
+
+    await service.linkThreadChannel("channel-orig", "thread-ch");
+
+    expect(mockRedisSet).not.toHaveBeenCalled();
+  });
+
+  it("propagates error when redis.get fails", async () => {
+    mockRedisGet.mockRejectedValue(new Error("connection lost"));
+    const service = await createService();
+
+    await expect(
+      service.linkThreadChannel("channel-orig", "thread-ch"),
+    ).rejects.toThrow("connection lost");
+  });
+
+  it("propagates error when redis.set fails", async () => {
+    mockRedisGet.mockResolvedValue("thread-abc");
+    mockRedisSet.mockRejectedValue(new Error("write error"));
+    const service = await createService();
+
+    await expect(
+      service.linkThreadChannel("channel-orig", "thread-ch"),
+    ).rejects.toThrow("write error");
+  });
+});
