@@ -200,4 +200,19 @@ describe("bootstrap error", () => {
 
     expect(() => bootstrap()).toThrow("config error");
   });
+
+  it("throws when OPENAI_API_KEY is not set", async () => {
+    setupMocks(
+      {
+        bot: { defaultModel: "codex-mini", maxTokens: 4096, timeoutMs: 30000 },
+        server: { port: 3000 },
+        logging: { level: "info" },
+      },
+      { OPENAI_API_KEY: undefined },
+    );
+
+    const { bootstrap } = await import("@/app/bootstrap");
+
+    expect(() => bootstrap()).toThrow("OPENAI_API_KEY is required");
+  });
 });

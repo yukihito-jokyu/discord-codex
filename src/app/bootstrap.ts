@@ -24,7 +24,11 @@ export function bootstrap() {
     log.warn({ err: String(err) }, "Redis connection failed");
   });
 
-  const codex = new CodexClient(env.OPENAI_API_KEY ?? "");
+  const apiKey = env.OPENAI_API_KEY;
+  if (!apiKey) {
+    throw new Error("OPENAI_API_KEY is required");
+  }
+  const codex = new CodexClient(apiKey);
   const aiService = new AIService(codex, redis);
 
   const commands = [new PingCommand(), new ChatCommand(aiService)];
