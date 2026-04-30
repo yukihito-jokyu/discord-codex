@@ -8,6 +8,7 @@ import {
 import { toDomain } from "@/sdk/discord/adapter/interaction.adapter";
 import { toDiscord } from "@/sdk/discord/adapter/response.adapter";
 import {
+  ACCESS_DENIED_MESSAGE,
   checkAccessControl,
   isUserAllowed,
 } from "@/server/middleware/access-control";
@@ -19,8 +20,6 @@ import {
   HTTP_UNAUTHORIZED,
 } from "@/shared/utils/http-status";
 import { getLogger } from "@/shared/utils/logger";
-
-const ACCESS_DENIED_MESSAGE = "このBotを利用する権限がありません。";
 
 export function createDiscordRoute(deps: {
   interactionHandler: InteractionHandler;

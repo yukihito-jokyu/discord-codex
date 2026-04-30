@@ -40,10 +40,15 @@ const mockSendMessage = vi.fn().mockResolvedValue(true);
 const mockCheckAccessControl = vi.fn().mockResolvedValue(null);
 const mockIsUserAllowed = vi.fn().mockReturnValue(true);
 
-vi.mock("@/server/middleware/access-control", () => ({
-  checkAccessControl: (...args: unknown[]) => mockCheckAccessControl(...args),
-  isUserAllowed: (...args: unknown[]) => mockIsUserAllowed(...args),
-}));
+vi.mock("@/server/middleware/access-control", async (importOriginal) => {
+  const actual =
+    await importOriginal<typeof import("@/server/middleware/access-control")>();
+  return {
+    ...actual,
+    checkAccessControl: (...args: unknown[]) => mockCheckAccessControl(...args),
+    isUserAllowed: (...args: unknown[]) => mockIsUserAllowed(...args),
+  };
+});
 
 const { createDiscordRoute } = await import("@/server/routes/discord.route");
 
