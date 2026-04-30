@@ -56,6 +56,73 @@ describe("botConfigSchema valid", () => {
   });
 });
 
+describe("botConfigSchema allowedUsers", () => {
+  it("accepts valid allowedUsers array", () => {
+    const result = botConfigSchema.parse({
+      bot: {
+        defaultModel: "codex-mini",
+        maxTokens: 4096,
+        timeoutMs: 30000,
+        allowedUsers: ["user-1", "user-2"],
+      },
+      server: { port: 3000 },
+    });
+
+    expect(result.bot.allowedUsers).toEqual(["user-1", "user-2"]);
+  });
+
+  it("accepts config without allowedUsers", () => {
+    const result = botConfigSchema.parse({
+      bot: { defaultModel: "codex-mini", maxTokens: 4096, timeoutMs: 30000 },
+      server: { port: 3000 },
+    });
+
+    expect(result.bot.allowedUsers).toBeUndefined();
+  });
+
+  it("accepts empty allowedUsers array", () => {
+    const result = botConfigSchema.parse({
+      bot: {
+        defaultModel: "codex-mini",
+        maxTokens: 4096,
+        timeoutMs: 30000,
+        allowedUsers: [],
+      },
+      server: { port: 3000 },
+    });
+
+    expect(result.bot.allowedUsers).toEqual([]);
+  });
+
+  it("rejects non-array allowedUsers", () => {
+    expect(() =>
+      botConfigSchema.parse({
+        bot: {
+          defaultModel: "codex-mini",
+          maxTokens: 4096,
+          timeoutMs: 30000,
+          allowedUsers: "not-an-array",
+        },
+        server: { port: 3000 },
+      }),
+    ).toThrow();
+  });
+
+  it("rejects allowedUsers with non-string elements", () => {
+    expect(() =>
+      botConfigSchema.parse({
+        bot: {
+          defaultModel: "codex-mini",
+          maxTokens: 4096,
+          timeoutMs: 30000,
+          allowedUsers: [123],
+        },
+        server: { port: 3000 },
+      }),
+    ).toThrow();
+  });
+});
+
 describe("botConfigSchema invalid bot fields", () => {
   it("rejects missing bot.defaultModel", () => {
     expect(() =>

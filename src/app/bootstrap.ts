@@ -76,7 +76,13 @@ function createDiscordDeps(aiService: AIService, codex: CodexClient) {
       });
   }
 
-  return { botToken, interactionHandler, messageHandler };
+  return {
+    botToken,
+    applicationId,
+    interactionHandler,
+    messageHandler,
+    discordApiClient,
+  };
 }
 
 export function bootstrap() {
@@ -86,12 +92,22 @@ export function bootstrap() {
   log.debug({ config }, "Config loaded");
 
   const { aiService, redis, codex } = createAIService();
-  const { botToken, interactionHandler, messageHandler } = createDiscordDeps(
-    aiService,
-    codex,
-  );
+  const {
+    botToken,
+    applicationId,
+    interactionHandler,
+    messageHandler,
+    discordApiClient,
+  } = createDiscordDeps(aiService, codex);
 
-  const app = createApp({ interactionHandler, messageHandler, botToken });
+  const app = createApp({
+    interactionHandler,
+    messageHandler,
+    discordApiClient,
+    botToken,
+    applicationId,
+    allowedUsers: config.bot.allowedUsers,
+  });
 
   const gateway = new DiscordGateway();
   const webhookUrl = `http://localhost:${config.server.port}/api/webhooks/discord`;

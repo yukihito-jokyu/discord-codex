@@ -27,11 +27,28 @@ vi.mock("@/sdk/discord/adapter/response.adapter", () => ({
 }));
 
 const mockParseGatewayEvent = vi.fn();
+const mockIsMentionEvent = vi.fn().mockReturnValue(false);
+
 vi.mock("@/sdk/discord/adapter/gateway-event.adapter", () => ({
   parseGatewayEvent: (...args: unknown[]) => mockParseGatewayEvent(...args),
+  isMentionEvent: (...args: unknown[]) => mockIsMentionEvent(...args),
 }));
 
 const mockHandleGatewayEvent = vi.fn();
+const mockSendMessage = vi.fn().mockResolvedValue(true);
+
+const mockCheckAccessControl = vi.fn().mockResolvedValue(null);
+const mockIsUserAllowed = vi.fn().mockReturnValue(true);
+
+vi.mock("@/server/middleware/access-control", async (importOriginal) => {
+  const actual =
+    await importOriginal<typeof import("@/server/middleware/access-control")>();
+  return {
+    ...actual,
+    checkAccessControl: (...args: unknown[]) => mockCheckAccessControl(...args),
+    isUserAllowed: (...args: unknown[]) => mockIsUserAllowed(...args),
+  };
+});
 
 const { createDiscordRoute } = await import("@/server/routes/discord.route");
 
@@ -48,7 +65,10 @@ function createMockMessageHandler() {
 const testDeps = {
   interactionHandler: createMockHandler(),
   messageHandler: createMockMessageHandler(),
+  discordApiClient: { sendMessage: mockSendMessage },
   botToken: "test-bot-token",
+  applicationId: "test-app-id",
+  allowedUsers: ["allowed-user-1"],
 };
 
 describe("createDiscordRoute - error cases", () => {
@@ -275,5 +295,193 @@ describe("createDiscordRoute - gateway invalid payload", () => {
     expect(res.status).toBe(400);
     expect(await res.json()).toEqual({ ok: false, error: "bad" });
     expect(mockHandleGatewayEvent).not.toHaveBeenCalled();
+  });
+});
+
+describe("createDiscordRoute - gateway mention access control", () => {
+  beforeEach(() => {
+    vi.restoreAllMocks();
+    mockParseGatewayEvent.mockReset();
+    mockHandleGatewayEvent.mockReset();
+    mockIsMentionEvent.mockReset();
+    mockIsUserAllowed.mockReset();
+    mockSendMessage.mockReset();
+    mockLog.warn.mockReset();
+  });
+
+  it("denies mention event from disallowed user and sends deny message", async () => {
+    const event = {
+      type: "GATEWAY_MESSAGE_CREATE",
+      timestamp: 1,
+      data: { author: { id: "disallowed-user" }, channel_id: "ch-123" },
+    };
+    mockParseGatewayEvent.mockReturnValue({ ok: true, value: event });
+    mockIsMentionEvent.mockReturnValue(true);
+    mockIsUserAllowed.mockReturnValue(false);
+    mockSendMessage.mockResolvedValue(true);
+
+    const app = createDiscordRoute(testDeps);
+
+    const res = await app.request("/", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "x-discord-gateway-token": "test-bot-token",
+      },
+      body: JSON.stringify(event),
+    });
+
+    expect(res.status).toBe(200);
+    expect(await res.json()).toEqual({ ok: true });
+    expect(mockSendMessage).toHaveBeenCalledWith(
+      "ch-123",
+      "このBotを利用する権限がありません。",
+    );
+    expect(mockHandleGatewayEvent).not.toHaveBeenCalled();
+    expect(mockLog.warn).toHaveBeenCalledWith(
+      { authorId: "disallowed-user" },
+      "Gateway event denied: user not in allowed list",
+    );
+  });
+
+  it("allows mention event from allowed user", async () => {
+    const event = {
+      type: "GATEWAY_MESSAGE_CREATE",
+      timestamp: 1,
+      data: { author: { id: "allowed-user-1" }, channel_id: "ch-123" },
+    };
+    mockParseGatewayEvent.mockReturnValue({ ok: true, value: event });
+    mockIsMentionEvent.mockReturnValue(true);
+    mockIsUserAllowed.mockReturnValue(true);
+    mockHandleGatewayEvent.mockResolvedValue(undefined);
+
+    const app = createDiscordRoute(testDeps);
+
+    const res = await app.request("/", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "x-discord-gateway-token": "test-bot-token",
+      },
+      body: JSON.stringify(event),
+    });
+
+    expect(res.status).toBe(200);
+    expect(mockSendMessage).not.toHaveBeenCalled();
+    expect(mockHandleGatewayEvent).toHaveBeenCalledWith(event);
+  });
+
+  it("denies mention event without channel_id and does not send message", async () => {
+    const event = {
+      type: "GATEWAY_MESSAGE_CREATE",
+      timestamp: 1,
+      data: { author: { id: "disallowed-user" } },
+    };
+    mockParseGatewayEvent.mockReturnValue({ ok: true, value: event });
+    mockIsMentionEvent.mockReturnValue(true);
+    mockIsUserAllowed.mockReturnValue(false);
+
+    const app = createDiscordRoute(testDeps);
+
+    const res = await app.request("/", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "x-discord-gateway-token": "test-bot-token",
+      },
+      body: JSON.stringify(event),
+    });
+
+    expect(res.status).toBe(200);
+    expect(await res.json()).toEqual({ ok: true });
+    expect(mockSendMessage).not.toHaveBeenCalled();
+    expect(mockHandleGatewayEvent).not.toHaveBeenCalled();
+  });
+
+  it("skips access control for non-mention gateway event", async () => {
+    const event = {
+      type: "GATEWAY_MESSAGE_CREATE",
+      timestamp: 1,
+      data: { author: { id: "disallowed-user" }, channel_id: "ch-123" },
+    };
+    mockParseGatewayEvent.mockReturnValue({ ok: true, value: event });
+    mockIsMentionEvent.mockReturnValue(false);
+    mockHandleGatewayEvent.mockResolvedValue(undefined);
+
+    const app = createDiscordRoute(testDeps);
+
+    const res = await app.request("/", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "x-discord-gateway-token": "test-bot-token",
+      },
+      body: JSON.stringify(event),
+    });
+
+    expect(res.status).toBe(200);
+    expect(mockIsUserAllowed).not.toHaveBeenCalled();
+    expect(mockHandleGatewayEvent).toHaveBeenCalledWith(event);
+  });
+});
+
+describe("createDiscordRoute - interaction access control", () => {
+  beforeEach(() => {
+    vi.restoreAllMocks();
+    mockCheckAccessControl.mockReset();
+    mockToDomain.mockReset();
+    mockLog.warn.mockReset();
+  });
+
+  it("returns access denied response from checkAccessControl", async () => {
+    mockCheckAccessControl.mockResolvedValue(
+      new Response(
+        JSON.stringify({ type: 4, data: { content: "deny", flags: 64 } }),
+        { status: 200 },
+      ),
+    );
+
+    const app = createDiscordRoute(testDeps);
+
+    const res = await app.request("/", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ type: 2, id: "1" }),
+    });
+
+    expect(res.status).toBe(200);
+    expect(mockToDomain).not.toHaveBeenCalled();
+  });
+
+  it("continues to interaction handling when access is allowed", async () => {
+    mockCheckAccessControl.mockResolvedValue(null);
+    const interaction: DomainInteraction = {
+      id: "1",
+      type: "command",
+      channelId: "ch1",
+      userId: "allowed-user-1",
+      commandName: "ping",
+      raw: {},
+    };
+    mockToDomain.mockReturnValue({ ok: true, value: interaction });
+    const handler = createMockHandler();
+    vi.mocked(handler).handle = vi
+      .fn()
+      .mockResolvedValue({ type: 4, data: { content: "Pong!" } });
+
+    const app = createDiscordRoute({
+      ...testDeps,
+      interactionHandler: handler,
+    });
+
+    const res = await app.request("/", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ type: 2, id: "1", data: { name: "ping" } }),
+    });
+
+    expect(res.status).toBe(200);
+    expect(mockToDomain).toHaveBeenCalled();
+    expect(handler.handle).toHaveBeenCalledWith(interaction);
   });
 });
