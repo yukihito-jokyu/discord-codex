@@ -17,6 +17,7 @@ export const botConfigSchema = z.object({
     defaultModel: z.string().min(1),
     maxTokens: z.number().int().min(0),
     timeoutMs: z.number().int().min(0),
+    allowedUsers: z.array(z.string()).optional(),
   }),
   server: z.object({
     port: z.number().int().min(1),
