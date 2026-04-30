@@ -1,9 +1,16 @@
 import { Hono } from "hono";
 import type { InteractionHandler } from "@/bot/handlers/interaction.handler";
 import type { MessageHandler } from "@/bot/handlers/message.handler";
-import { parseGatewayEvent } from "@/sdk/discord/adapter/gateway-event.adapter";
+import {
+  isMentionEvent,
+  parseGatewayEvent,
+} from "@/sdk/discord/adapter/gateway-event.adapter";
 import { toDomain } from "@/sdk/discord/adapter/interaction.adapter";
 import { toDiscord } from "@/sdk/discord/adapter/response.adapter";
+import {
+  checkAccessControl,
+  isUserAllowed,
+} from "@/server/middleware/access-control";
 import { verifyDiscordSignature } from "@/server/middleware/verify-discord";
 import {
   HTTP_BAD_REQUEST,
@@ -13,10 +20,17 @@ import {
 } from "@/shared/utils/http-status";
 import { getLogger } from "@/shared/utils/logger";
 
+const ACCESS_DENIED_MESSAGE = "このBotを利用する権限がありません。";
+
 export function createDiscordRoute(deps: {
   interactionHandler: InteractionHandler;
   messageHandler: MessageHandler;
+  discordApiClient: {
+    sendMessage: (channelId: string, content: string) => Promise<boolean>;
+  };
   botToken: string;
+  applicationId: string;
+  allowedUsers?: string[];
 }): Hono {
   const discord = new Hono();
   const log = getLogger();
@@ -47,12 +61,35 @@ export function createDiscordRoute(deps: {
         );
       }
 
+      const eventData = eventResult.value.data as Record<string, unknown>;
+      if (isMentionEvent(eventResult.value, deps.applicationId)) {
+        const author = eventData?.author as Record<string, unknown> | undefined;
+        const authorId = author?.id as string | undefined;
+        if (!isUserAllowed(authorId, deps.allowedUsers)) {
+          log.warn(
+            { authorId },
+            "Gateway event denied: user not in allowed list",
+          );
+          const channelId = eventData.channel_id as string | undefined;
+          if (channelId) {
+            await deps.discordApiClient.sendMessage(
+              channelId,
+              ACCESS_DENIED_MESSAGE,
+            );
+          }
+          return c.json({ ok: true }, HTTP_OK);
+        }
+      }
+
       await deps.messageHandler.handleGatewayEvent(eventResult.value);
       return c.json({ ok: true }, HTTP_OK);
     }
 
     const verifyResult = await verifyDiscordSignature(c);
     if (verifyResult) return verifyResult;
+
+    const accessResult = await checkAccessControl(c, deps.allowedUsers);
+    if (accessResult) return accessResult;
 
     const raw = await c.req.json();
     const result = toDomain(raw);
