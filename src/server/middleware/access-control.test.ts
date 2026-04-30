@@ -36,16 +36,16 @@ describe("checkAccessControl - pass-through conditions", () => {
     mockLog.warn.mockReset();
   });
 
-  it("returns ephemeral response when allowedUsers is undefined", async () => {
+  it("returns null when allowedUsers is undefined (allow all)", async () => {
     const { c } = createContext('{"type":2,"member":{"user":{"id":"user_1"}}}');
     const result = await checkAccessControl(c);
-    expect(result).not.toBeNull();
+    expect(result).toBeNull();
   });
 
-  it("returns ephemeral response when allowedUsers is empty array", async () => {
+  it("returns null when allowedUsers is empty array (allow all)", async () => {
     const { c } = createContext('{"type":2,"member":{"user":{"id":"user_1"}}}');
     const result = await checkAccessControl(c, []);
-    expect(result).not.toBeNull();
+    expect(result).toBeNull();
   });
 
   it("returns null for PING interaction (type=1)", async () => {
@@ -62,6 +62,12 @@ describe("checkAccessControl - pass-through conditions", () => {
 
   it("returns null when userId is in allowedUsers (user.id)", async () => {
     const { c } = createContext('{"type":2,"user":{"id":"user_2"}}');
+    const result = await checkAccessControl(c, ALLOWED_USERS);
+    expect(result).toBeNull();
+  });
+
+  it("returns null when body is not valid JSON", async () => {
+    const { c } = createContext("not-valid-json");
     const result = await checkAccessControl(c, ALLOWED_USERS);
     expect(result).toBeNull();
   });
@@ -134,12 +140,12 @@ describe("isUserAllowed", () => {
     expect(isUserAllowed(undefined, ALLOWED_USERS)).toBe(false);
   });
 
-  it("returns false when allowedUsers is undefined", () => {
-    expect(isUserAllowed("user_1", undefined)).toBe(false);
+  it("returns true when allowedUsers is undefined (allow all)", () => {
+    expect(isUserAllowed("user_1", undefined)).toBe(true);
   });
 
-  it("returns false when allowedUsers is empty array", () => {
-    expect(isUserAllowed("user_1", [])).toBe(false);
+  it("returns true when allowedUsers is empty array (allow all)", () => {
+    expect(isUserAllowed("user_1", [])).toBe(true);
   });
 
   it("returns false when userId is empty string", () => {
@@ -184,7 +190,7 @@ describe("createAccessControl - middleware wrapper", () => {
     );
   });
 
-  it("returns ephemeral response when allowedUsers is undefined", async () => {
+  it("calls next when allowedUsers is undefined (allow all)", async () => {
     const middleware = createAccessControl(undefined);
     const { c, next } = createContext(
       '{"type":2,"member":{"user":{"id":"user_1"}}}',
@@ -192,16 +198,6 @@ describe("createAccessControl - middleware wrapper", () => {
 
     await middleware(c, next);
 
-    expect(next).not.toHaveBeenCalled();
-    expect(c.json).toHaveBeenCalledWith(
-      {
-        type: 4,
-        data: {
-          content: "このBotを利用する権限がありません。",
-          flags: 64,
-        },
-      },
-      200,
-    );
+    expect(next).toHaveBeenCalledOnce();
   });
 });

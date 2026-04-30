@@ -5,6 +5,8 @@ import { getLogger } from "@/shared/utils/logger";
 const DISCORD_INTERACTION_TYPE_PING = 1;
 // biome-ignore lint/suspicious/noBitwiseOperators: Discord ephemeral flag requires bitwise operation
 const EPHEMERAL_FLAG = 1 << 6;
+// biome-ignore lint/security/noSecrets: false positive — user-facing error message, not a secret
+export const ACCESS_DENIED_MESSAGE = "このBotを利用する権限がありません。";
 
 export async function checkAccessControl(
   c: Context,
@@ -33,8 +35,8 @@ export function isUserAllowed(
   userId: string | undefined,
   allowedUsers?: string[],
 ): boolean {
-  const allowed = allowedUsers?.filter((u) => u.length > 0) ?? [];
-  return Boolean(userId && allowed.includes(userId));
+  if (!allowedUsers || allowedUsers.length === 0) return true;
+  return Boolean(userId && allowedUsers.includes(userId));
 }
 
 function extractUserId(parsed: Record<string, unknown>): string | undefined {
@@ -45,8 +47,6 @@ function extractUserId(parsed: Record<string, unknown>): string | undefined {
 }
 
 function ephemeralDeny(c: Context): Response {
-  // biome-ignore lint/security/noSecrets: false positive — user-facing error message, not a secret
-  const ACCESS_DENIED_MESSAGE = "このBotを利用する権限がありません。";
   return c.json(
     {
       type: 4,
