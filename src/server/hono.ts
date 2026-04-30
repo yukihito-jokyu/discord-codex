@@ -9,7 +9,12 @@ import { getLogger } from "@/shared/utils/logger";
 export function createApp(deps?: {
   interactionHandler: InteractionHandler;
   messageHandler: MessageHandler;
+  discordApiClient: {
+    sendMessage: (channelId: string, content: string) => Promise<boolean>;
+  };
   botToken: string;
+  applicationId: string;
+  allowedUsers?: string[];
 }) {
   const app = new Hono();
 
