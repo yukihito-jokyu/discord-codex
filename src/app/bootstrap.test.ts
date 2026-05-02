@@ -61,14 +61,17 @@ function setupMocks(
       };
     }),
   }));
-  vi.doMock("@/infrastructure/discord/discord-api.client", () => ({
+  vi.doMock("@/sdk/discord/discord.client", () => ({
     // biome-ignore lint/complexity/useArrowFunction: constructor mock requires function expression
-    DiscordApiClient: vi.fn().mockImplementation(function () {
+    DiscordClient: vi.fn().mockImplementation(function () {
       return {
         registerGuildCommands: mockRegisterGuildCommands,
         sendMessage: vi.fn(),
       };
     }),
+  }));
+  vi.doMock("@chat-adapter/discord", () => ({
+    createDiscordAdapter: vi.fn().mockReturnValue({}),
   }));
   vi.doMock("@/ai/client/codex.client", () => ({
     // biome-ignore lint/complexity/useArrowFunction: constructor mock requires function expression
@@ -388,7 +391,6 @@ describe("bootstrap guild command registration", () => {
     bootstrap();
 
     expect(mockRegisterGuildCommands).toHaveBeenCalledWith(
-      "test-app-id",
       "guild-123",
       expect.arrayContaining([
         expect.objectContaining({ name: "ping" }),

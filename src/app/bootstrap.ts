@@ -1,3 +1,4 @@
+import { createDiscordAdapter } from "@chat-adapter/discord";
 import { CodexClient } from "@/ai/client/codex.client";
 import { AIService } from "@/ai/services/ai.service";
 import { SummaryService } from "@/ai/services/summary.service";
@@ -9,9 +10,9 @@ import { PingCommand } from "@/bot/commands/utility/ping.command";
 import { InteractionHandler } from "@/bot/handlers/interaction.handler";
 import { MessageHandler } from "@/bot/handlers/message.handler";
 import { Router } from "@/bot/router";
-import { DiscordApiClient } from "@/infrastructure/discord/discord-api.client";
 import { RedisClient } from "@/infrastructure/redis/redis.client";
 import { WebFetcherClient } from "@/infrastructure/web/web-fetcher.client";
+import { DiscordClient } from "@/sdk/discord/discord.client";
 import { DiscordGateway } from "@/server/gateway/discord.gateway";
 import { createApp } from "@/server/hono";
 import { createLogger, getLogger } from "@/shared/utils/logger";
@@ -43,22 +44,18 @@ function createDiscordDeps(aiService: AIService, codex: CodexClient) {
   if (!botToken) throw new Error("DISCORD_BOT_TOKEN is required");
   if (!applicationId) throw new Error("DISCORD_APPLICATION_ID is required");
 
-  const discordApiClient = new DiscordApiClient(botToken);
-  const chatCommand = new ChatCommand(
-    aiService,
-    discordApiClient,
+  const adapter = createDiscordAdapter({
+    botToken,
     applicationId,
-  );
+  });
+  const discordClient = new DiscordClient(adapter, botToken, applicationId);
+  const chatCommand = new ChatCommand(aiService, discordClient);
   const summaryService = new SummaryService(codex, new WebFetcherClient());
-  const summaryCommand = new SummaryCommand(
-    summaryService,
-    discordApiClient,
-    applicationId,
-  );
+  const summaryCommand = new SummaryCommand(summaryService, discordClient);
   const commands = [new PingCommand(), chatCommand, summaryCommand];
   const messageHandler = new MessageHandler(
     aiService,
-    discordApiClient,
+    discordClient,
     applicationId,
   );
   const router = new Router(commands);
@@ -66,9 +63,9 @@ function createDiscordDeps(aiService: AIService, codex: CodexClient) {
 
   const guildId = env.DISCORD_GUILD_ID;
   if (guildId) {
-    discordApiClient
-      .registerGuildCommands(applicationId, guildId, commands)
-      .catch((err) => {
+    discordClient
+      .registerGuildCommands(guildId, commands)
+      .catch((err: unknown) => {
         getLogger().error(
           { err: String(err) },
           "Guild command registration failed",
@@ -81,7 +78,7 @@ function createDiscordDeps(aiService: AIService, codex: CodexClient) {
     applicationId,
     interactionHandler,
     messageHandler,
-    discordApiClient,
+    discordClient,
   };
 }
 
@@ -97,13 +94,13 @@ export function bootstrap() {
     applicationId,
     interactionHandler,
     messageHandler,
-    discordApiClient,
+    discordClient,
   } = createDiscordDeps(aiService, codex);
 
   const app = createApp({
     interactionHandler,
     messageHandler,
-    discordApiClient,
+    discordClient,
     botToken,
     applicationId,
     allowedUsers: config.bot.allowedUsers,
