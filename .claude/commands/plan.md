@@ -14,6 +14,8 @@ description: Issueを読み取り、実行計画を作成するタスク
 
 ## Your task
 
+0. Issueの内容を取得する前に、`ARCHITECTURE.md` を参照してプロジェクトの層構造と配置ルールを把握してください。Issueの内容から影響範囲が予想される層・ディレクトリを特定し、調査の重点を絞ります。
+
 1. 以下のコマンドでIssueの内容を取得してください:
    ```
    gh issue view <issue-number>
