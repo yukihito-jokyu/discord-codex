@@ -10,9 +10,12 @@ const mockLog = {
 
 vi.mock("@/shared/utils/logger", () => ({ getLogger: () => mockLog }));
 
-const { checkAccessControl, createAccessControl, isUserAllowed } = await import(
-  "@/server/middleware/access-control"
-);
+const {
+  ACCESS_DENIED_MESSAGE,
+  checkAccessControl,
+  createAccessControl,
+  isUserAllowed,
+} = await import("@/server/middleware/access-control");
 
 function createContext(body: string) {
   const raw = new Request("https://example.com", {
@@ -90,7 +93,7 @@ describe("checkAccessControl - denial", () => {
       {
         type: 4,
         data: {
-          content: "このBotを利用する権限がありません。",
+          content: ACCESS_DENIED_MESSAGE,
           flags: 64,
         },
       },
@@ -111,7 +114,7 @@ describe("checkAccessControl - denial", () => {
       {
         type: 4,
         data: {
-          content: "このBotを利用する権限がありません。",
+          content: ACCESS_DENIED_MESSAGE,
           flags: 64,
         },
       },
@@ -182,7 +185,7 @@ describe("createAccessControl - middleware wrapper", () => {
       {
         type: 4,
         data: {
-          content: "このBotを利用する権限がありません。",
+          content: ACCESS_DENIED_MESSAGE,
           flags: 64,
         },
       },
