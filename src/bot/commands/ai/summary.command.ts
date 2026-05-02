@@ -1,6 +1,6 @@
 import type { SummaryService } from "@/ai/services/summary.service";
-import type { DiscordApiClient } from "@/infrastructure/discord/discord-api.client";
 import { deferred, message } from "@/sdk/discord/adapter/response.adapter";
+import type { DiscordClient } from "@/sdk/discord/discord.client";
 import type {
   DomainInteraction,
   DomainResponse,
@@ -19,8 +19,7 @@ export class SummaryCommand implements Command {
 
   constructor(
     private summaryService: SummaryService,
-    private discordApiClient: DiscordApiClient,
-    private applicationId: string,
+    private discordClient: DiscordClient,
   ) {}
 
   execute(interaction: DomainInteraction): Promise<DomainResponse> {
@@ -53,11 +52,10 @@ export class SummaryCommand implements Command {
   ): Promise<void> {
     const log = getLogger();
 
-    const content = await this.discordApiClient.getFirstMessage(channelId);
+    const content = await this.discordClient.getFirstMessage(channelId);
     if (!content) {
       log.warn({ channelId }, "No message found in channel");
-      await this.discordApiClient.editInteractionResponse(
-        this.applicationId,
+      await this.discordClient.editInteractionResponse(
         interactionToken,
         // biome-ignore lint/security/noSecrets: static Japanese error message, not a secret
         "メッセージの取得に失敗しました。",
@@ -68,8 +66,7 @@ export class SummaryCommand implements Command {
     const urls = content.match(URL_PATTERN);
     if (!urls || urls.length === 0) {
       log.info({ channelId }, "No URLs found in message");
-      await this.discordApiClient.editInteractionResponse(
-        this.applicationId,
+      await this.discordClient.editInteractionResponse(
         interactionToken,
         // biome-ignore lint/security/noSecrets: static Japanese error message, not a secret
         "リンクが見つかりませんでした。",
@@ -84,8 +81,7 @@ export class SummaryCommand implements Command {
         { error: result.error.message, channelId },
         "Summary service returned error",
       );
-      await this.discordApiClient.editInteractionResponse(
-        this.applicationId,
+      await this.discordClient.editInteractionResponse(
         interactionToken,
         // biome-ignore lint/security/noSecrets: static Japanese error message, not a secret
         "要約の生成に失敗しました。しばらくしてからお試しください。",
@@ -93,8 +89,7 @@ export class SummaryCommand implements Command {
       return;
     }
 
-    await this.discordApiClient.editInteractionResponse(
-      this.applicationId,
+    await this.discordClient.editInteractionResponse(
       interactionToken,
       result.value,
     );
