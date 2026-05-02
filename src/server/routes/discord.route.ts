@@ -25,7 +25,7 @@ import { getLogger } from "@/shared/utils/logger";
 type RouteDeps = {
   interactionHandler: InteractionHandler;
   messageHandler: MessageHandler;
-  discordApiClient: {
+  discordClient: {
     sendMessage: (channelId: string, content: string) => Promise<boolean>;
   };
   botToken: string;
@@ -69,10 +69,7 @@ async function handleGatewayEvent(
       log.warn({ authorId }, "Gateway event denied: user not in allowed list");
       const channelId = eventData.channel_id as string | undefined;
       if (channelId) {
-        await deps.discordApiClient.sendMessage(
-          channelId,
-          ACCESS_DENIED_MESSAGE,
-        );
+        await deps.discordClient.sendMessage(channelId, ACCESS_DENIED_MESSAGE);
       }
       return c.json({ ok: true }, HTTP_OK);
     }

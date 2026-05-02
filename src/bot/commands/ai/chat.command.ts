@@ -1,6 +1,6 @@
 import type { AIService } from "@/ai/services/ai.service";
-import type { DiscordApiClient } from "@/infrastructure/discord/discord-api.client";
 import { deferred, message } from "@/sdk/discord/adapter/response.adapter";
+import type { DiscordClient } from "@/sdk/discord/discord.client";
 import type {
   DomainInteraction,
   DomainResponse,
@@ -25,8 +25,7 @@ export class ChatCommand implements Command {
 
   constructor(
     private aiService: AIService,
-    private discordApiClient: DiscordApiClient,
-    private applicationId: string,
+    private discordClient: DiscordClient,
   ) {}
 
   execute(interaction: DomainInteraction): Promise<DomainResponse> {
@@ -68,8 +67,7 @@ export class ChatCommand implements Command {
 
     const inThread = await this.isThreadChannel(channelId);
     const responseContent = inThread ? userMessage : `> ${userMessage}`;
-    const messageId = await this.discordApiClient.editInteractionResponse(
-      this.applicationId,
+    const messageId = await this.discordClient.editInteractionResponse(
       interactionToken,
       responseContent,
     );
@@ -77,7 +75,7 @@ export class ChatCommand implements Command {
 
     let targetChannelId = channelId;
     if (!inThread && messageId) {
-      const threadId = await this.discordApiClient.createThreadFromMessage(
+      const threadId = await this.discordClient.createThreadFromMessage(
         channelId,
         messageId,
         userMessage.slice(0, 100),
@@ -96,7 +94,7 @@ export class ChatCommand implements Command {
         { error: result.error.message, channelId },
         "AI service returned error",
       );
-      await this.discordApiClient.sendMessage(
+      await this.discordClient.sendMessage(
         targetChannelId,
         // biome-ignore lint/security/noSecrets: static Japanese error message, not a secret
         "エラーが発生しました。しばらくしてからお試しください。",
@@ -104,11 +102,11 @@ export class ChatCommand implements Command {
       return;
     }
 
-    await this.discordApiClient.sendMessage(targetChannelId, result.value);
+    await this.discordClient.sendMessage(targetChannelId, result.value);
   }
 
   private async isThreadChannel(channelId: string): Promise<boolean> {
-    const result = await this.discordApiClient.isThreadChannel(channelId);
+    const result = await this.discordClient.isThreadChannel(channelId);
     return result;
   }
 }

@@ -9,7 +9,7 @@ import { getLogger } from "@/shared/utils/logger";
 export function createApp(deps?: {
   interactionHandler: InteractionHandler;
   messageHandler: MessageHandler;
-  discordApiClient: {
+  discordClient: {
     sendMessage: (channelId: string, content: string) => Promise<boolean>;
   };
   botToken: string;

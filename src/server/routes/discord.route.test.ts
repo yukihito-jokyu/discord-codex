@@ -82,7 +82,7 @@ function postGatewayEvent(
 const testDeps = {
   interactionHandler: createMockHandler(),
   messageHandler: createMockMessageHandler(),
-  discordApiClient: { sendMessage: mockSendMessage },
+  discordClient: { sendMessage: mockSendMessage },
   botToken: "test-bot-token",
   applicationId: "test-app-id",
   allowedUsers: ["allowed-user-1"],

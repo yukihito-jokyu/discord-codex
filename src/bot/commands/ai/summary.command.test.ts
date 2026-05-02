@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 import type { SummaryService } from "@/ai/services/summary.service";
-import type { DiscordApiClient } from "@/infrastructure/discord/discord-api.client";
+import type { DiscordClient } from "@/sdk/discord/discord.client";
 import type { DomainInteraction } from "@/sdk/discord/types/domain";
 import { ExternalServiceError } from "@/shared/types/errors";
 import { err, ok } from "@/shared/types/result";
@@ -33,14 +33,12 @@ function createMockSummaryService(): SummaryService {
   return { summarize: vi.fn() } as unknown as SummaryService;
 }
 
-function createMockDiscordApiClient(): DiscordApiClient {
+function createMockDiscordClient(): DiscordClient {
   return {
     getFirstMessage: vi.fn(),
     editInteractionResponse: vi.fn().mockResolvedValue("msg-1"),
-  } as unknown as DiscordApiClient;
+  } as unknown as DiscordClient;
 }
-
-const APPLICATION_ID = "app-1";
 
 function flushPromises(): Promise<void> {
   return new Promise((resolve) => setImmediate(resolve));
@@ -50,8 +48,7 @@ describe("SummaryCommand properties", () => {
   it("has name 'summary'", () => {
     const command = new SummaryCommand(
       createMockSummaryService(),
-      createMockDiscordApiClient(),
-      APPLICATION_ID,
+      createMockDiscordClient(),
     );
     expect(command.name).toBe("summary");
   });
@@ -59,8 +56,7 @@ describe("SummaryCommand properties", () => {
   it("has definition with description", () => {
     const command = new SummaryCommand(
       createMockSummaryService(),
-      createMockDiscordApiClient(),
-      APPLICATION_ID,
+      createMockDiscordClient(),
     );
     expect(command.definition).toEqual({
       // biome-ignore lint/security/noSecrets: static Japanese UI text, not a secret
@@ -73,8 +69,7 @@ describe("SummaryCommand missing token", () => {
   it("returns error when interaction has no token", async () => {
     const command = new SummaryCommand(
       createMockSummaryService(),
-      createMockDiscordApiClient(),
-      APPLICATION_ID,
+      createMockDiscordClient(),
     );
     const response = await command.execute(createMockInteraction({ raw: {} }));
 
@@ -85,19 +80,17 @@ describe("SummaryCommand missing token", () => {
 
 describe("SummaryCommand no message", () => {
   it("replies error when first message not found", async () => {
-    const discordApiClient = createMockDiscordApiClient();
-    vi.mocked(discordApiClient.getFirstMessage).mockResolvedValue(null);
+    const discordClient = createMockDiscordClient();
+    vi.mocked(discordClient.getFirstMessage).mockResolvedValue(null);
 
     const command = new SummaryCommand(
       createMockSummaryService(),
-      discordApiClient,
-      APPLICATION_ID,
+      discordClient,
     );
     await command.execute(createMockInteraction());
     await flushPromises();
 
-    expect(discordApiClient.editInteractionResponse).toHaveBeenCalledWith(
-      APPLICATION_ID,
+    expect(discordClient.editInteractionResponse).toHaveBeenCalledWith(
       "token-1",
       // biome-ignore lint/security/noSecrets: Japanese test assertion, not a secret
       expect.stringContaining("メッセージの取得に失敗"),
@@ -107,21 +100,19 @@ describe("SummaryCommand no message", () => {
 
 describe("SummaryCommand no url", () => {
   it("replies error when no url in message", async () => {
-    const discordApiClient = createMockDiscordApiClient();
-    vi.mocked(discordApiClient.getFirstMessage).mockResolvedValue(
+    const discordClient = createMockDiscordClient();
+    vi.mocked(discordClient.getFirstMessage).mockResolvedValue(
       "no-url-message",
     );
 
     const command = new SummaryCommand(
       createMockSummaryService(),
-      discordApiClient,
-      APPLICATION_ID,
+      discordClient,
     );
     await command.execute(createMockInteraction());
     await flushPromises();
 
-    expect(discordApiClient.editInteractionResponse).toHaveBeenCalledWith(
-      APPLICATION_ID,
+    expect(discordClient.editInteractionResponse).toHaveBeenCalledWith(
       "token-1",
       expect.stringContaining("リンクが見つかりません"),
     );
@@ -131,17 +122,13 @@ describe("SummaryCommand no url", () => {
 describe("SummaryCommand success", () => {
   it("returns deferred and replies summary", async () => {
     const summaryService = createMockSummaryService();
-    const discordApiClient = createMockDiscordApiClient();
-    vi.mocked(discordApiClient.getFirstMessage).mockResolvedValue(
+    const discordClient = createMockDiscordClient();
+    vi.mocked(discordClient.getFirstMessage).mockResolvedValue(
       "https://example.com/article1",
     );
     vi.mocked(summaryService.summarize).mockResolvedValue(ok("summary ok"));
 
-    const command = new SummaryCommand(
-      summaryService,
-      discordApiClient,
-      APPLICATION_ID,
-    );
+    const command = new SummaryCommand(summaryService, discordClient);
 
     const response = await command.execute(createMockInteraction());
     expect(response.type).toBe(5);
@@ -150,8 +137,7 @@ describe("SummaryCommand success", () => {
     expect(summaryService.summarize).toHaveBeenCalledWith([
       "https://example.com/article1",
     ]);
-    expect(discordApiClient.editInteractionResponse).toHaveBeenCalledWith(
-      APPLICATION_ID,
+    expect(discordClient.editInteractionResponse).toHaveBeenCalledWith(
       "token-1",
       "summary ok",
     );
@@ -161,24 +147,19 @@ describe("SummaryCommand success", () => {
 describe("SummaryCommand service error", () => {
   it("replies error when summarize fails", async () => {
     const summaryService = createMockSummaryService();
-    const discordApiClient = createMockDiscordApiClient();
-    vi.mocked(discordApiClient.getFirstMessage).mockResolvedValue(
+    const discordClient = createMockDiscordClient();
+    vi.mocked(discordClient.getFirstMessage).mockResolvedValue(
       "https://example.com",
     );
     vi.mocked(summaryService.summarize).mockResolvedValue(
       err(new ExternalServiceError("Codex", "API error")),
     );
 
-    const command = new SummaryCommand(
-      summaryService,
-      discordApiClient,
-      APPLICATION_ID,
-    );
+    const command = new SummaryCommand(summaryService, discordClient);
     await command.execute(createMockInteraction());
     await flushPromises();
 
-    expect(discordApiClient.editInteractionResponse).toHaveBeenCalledWith(
-      APPLICATION_ID,
+    expect(discordClient.editInteractionResponse).toHaveBeenCalledWith(
       "token-1",
       // biome-ignore lint/security/noSecrets: Japanese test assertion, not a secret
       expect.stringContaining("要約の生成に失敗"),
@@ -189,17 +170,13 @@ describe("SummaryCommand service error", () => {
 describe("SummaryCommand multiple urls", () => {
   it("extracts multiple URLs and passes them to summarize", async () => {
     const summaryService = createMockSummaryService();
-    const discordApiClient = createMockDiscordApiClient();
-    vi.mocked(discordApiClient.getFirstMessage).mockResolvedValue(
+    const discordClient = createMockDiscordClient();
+    vi.mocked(discordClient.getFirstMessage).mockResolvedValue(
       "Check https://example.com/a and https://example.org/b",
     );
     vi.mocked(summaryService.summarize).mockResolvedValue(ok("summary ok"));
 
-    const command = new SummaryCommand(
-      summaryService,
-      discordApiClient,
-      APPLICATION_ID,
-    );
+    const command = new SummaryCommand(summaryService, discordClient);
     await command.execute(createMockInteraction());
     await flushPromises();
 
@@ -213,17 +190,13 @@ describe("SummaryCommand multiple urls", () => {
 describe("SummaryCommand duplicate urls", () => {
   it("deduplicates identical URLs before passing to summarize", async () => {
     const summaryService = createMockSummaryService();
-    const discordApiClient = createMockDiscordApiClient();
-    vi.mocked(discordApiClient.getFirstMessage).mockResolvedValue(
+    const discordClient = createMockDiscordClient();
+    vi.mocked(discordClient.getFirstMessage).mockResolvedValue(
       "https://example.com https://example.com",
     );
     vi.mocked(summaryService.summarize).mockResolvedValue(ok("summary ok"));
 
-    const command = new SummaryCommand(
-      summaryService,
-      discordApiClient,
-      APPLICATION_ID,
-    );
+    const command = new SummaryCommand(summaryService, discordClient);
     await command.execute(createMockInteraction());
     await flushPromises();
 

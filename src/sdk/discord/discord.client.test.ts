@@ -12,86 +12,77 @@ vi.mock("@/shared/utils/logger", () => ({
   }),
 }));
 
+const mockPostChannelMessage = vi.fn();
+const mockFetchChannelMessages = vi.fn();
+const mockFetchChannelInfo = vi.fn();
+const mockEncodeThreadId = vi
+  .fn()
+  .mockImplementation(({ channelId }: { channelId: string }) => channelId);
+
+const mockAdapter = {
+  postChannelMessage: mockPostChannelMessage,
+  fetchChannelMessages: mockFetchChannelMessages,
+  fetchChannelInfo: mockFetchChannelInfo,
+  encodeThreadId: mockEncodeThreadId,
+};
+
+vi.mock("@chat-adapter/discord", () => ({
+  createDiscordAdapter: vi.fn().mockReturnValue(mockAdapter),
+}));
+
 const mockFetch = vi.fn();
 vi.stubGlobal("fetch", mockFetch);
 
-const { DiscordApiClient } = await import("./discord-api.client");
+const { DiscordClient } = await import("./discord.client");
 
-describe("DiscordApiClient sendMessage success", () => {
+function createClient() {
+  return new DiscordClient(mockAdapter as never, "test-token", "app-123");
+}
+
+describe("DiscordClient sendMessage success", () => {
   beforeEach(() => {
     vi.clearAllMocks();
   });
 
   it("returns true on success", async () => {
-    mockFetch.mockResolvedValue({ ok: true });
-    const client = new DiscordApiClient("test-token");
+    mockPostChannelMessage.mockResolvedValue({});
+    const client = createClient();
 
     const result = await client.sendMessage("ch-123", "Hello!");
 
     expect(result).toBe(true);
   });
 
-  it("sends message with correct URL and headers", async () => {
-    mockFetch.mockResolvedValue({ ok: true });
-    const client = new DiscordApiClient("test-token");
+  it("calls adapter postChannelMessage with encoded channel ID", async () => {
+    mockPostChannelMessage.mockResolvedValue({});
+    const client = createClient();
 
     await client.sendMessage("ch-123", "Hello!");
 
-    expect(mockFetch).toHaveBeenCalledWith(
-      "https://discord.com/api/v10/channels/ch-123/messages",
-      {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: "Bot test-token",
-        },
-        body: JSON.stringify({ content: "Hello!" }),
-      },
-    );
+    expect(mockPostChannelMessage).toHaveBeenCalledWith("ch-123", "Hello!");
   });
 });
 
-describe("DiscordApiClient sendMessage error", () => {
+describe("DiscordClient sendMessage error", () => {
   beforeEach(() => {
     vi.clearAllMocks();
   });
 
-  it("returns false on API error response", async () => {
-    mockFetch.mockResolvedValue({ ok: false, status: 403 });
-    const client = new DiscordApiClient("test-token");
+  it("returns false on adapter error", async () => {
+    mockPostChannelMessage.mockRejectedValue(new Error("API error"));
+    const client = createClient();
 
-    await expect(client.sendMessage("ch-123", "Hello!")).resolves.toBe(false);
+    const result = await client.sendMessage("ch-123", "Hello!");
+
+    expect(result).toBe(false);
     expect(mockLogError).toHaveBeenCalledWith(
-      { status: 403, channelId: "ch-123" },
-      "Failed to send Discord message",
-    );
-  });
-
-  it("returns false on network error", async () => {
-    mockFetch.mockRejectedValue(new Error("ECONNREFUSED"));
-    const client = new DiscordApiClient("test-token");
-
-    await expect(client.sendMessage("ch-123", "Hello!")).resolves.toBe(false);
-    expect(mockLogError).toHaveBeenCalledWith(
-      { err: "ECONNREFUSED", channelId: "ch-123" },
-      "Discord API request failed",
-    );
-  });
-
-  it("logs error with status 429 for rate limiting", async () => {
-    mockFetch.mockResolvedValue({ ok: false, status: 429 });
-    const client = new DiscordApiClient("test-token");
-
-    await client.sendMessage("ch-123", "Hello!");
-
-    expect(mockLogError).toHaveBeenCalledWith(
-      { status: 429, channelId: "ch-123" },
+      { err: "API error", channelId: "ch-123" },
       "Failed to send Discord message",
     );
   });
 });
 
-describe("DiscordApiClient editInteractionResponse success", () => {
+describe("DiscordClient editInteractionResponse success", () => {
   beforeEach(() => {
     vi.clearAllMocks();
   });
@@ -101,10 +92,9 @@ describe("DiscordApiClient editInteractionResponse success", () => {
       ok: true,
       json: () => Promise.resolve({ id: "msg-789" }),
     });
-    const client = new DiscordApiClient("test-token");
+    const client = createClient();
 
     const result = await client.editInteractionResponse(
-      "app-123",
       "token-abc",
       "response content",
     );
@@ -117,19 +107,15 @@ describe("DiscordApiClient editInteractionResponse success", () => {
       ok: true,
       json: () => Promise.resolve({}),
     });
-    const client = new DiscordApiClient("test-token");
+    const client = createClient();
 
-    const result = await client.editInteractionResponse(
-      "app-123",
-      "token-abc",
-      "content",
-    );
+    const result = await client.editInteractionResponse("token-abc", "content");
 
     expect(result).toBeNull();
   });
 });
 
-describe("DiscordApiClient editInteractionResponse error", () => {
+describe("DiscordClient editInteractionResponse error", () => {
   beforeEach(() => {
     vi.clearAllMocks();
   });
@@ -140,13 +126,9 @@ describe("DiscordApiClient editInteractionResponse error", () => {
       status: 404,
       text: () => Promise.resolve("Not found"),
     });
-    const client = new DiscordApiClient("test-token");
+    const client = createClient();
 
-    const result = await client.editInteractionResponse(
-      "app-123",
-      "token-abc",
-      "content",
-    );
+    const result = await client.editInteractionResponse("token-abc", "content");
 
     expect(result).toBeNull();
     expect(mockLogError).toHaveBeenCalledWith(
@@ -157,13 +139,9 @@ describe("DiscordApiClient editInteractionResponse error", () => {
 
   it("returns null on network error", async () => {
     mockFetch.mockRejectedValue(new Error("ECONNREFUSED"));
-    const client = new DiscordApiClient("test-token");
+    const client = createClient();
 
-    const result = await client.editInteractionResponse(
-      "app-123",
-      "token-abc",
-      "content",
-    );
+    const result = await client.editInteractionResponse("token-abc", "content");
 
     expect(result).toBeNull();
     expect(mockLogError).toHaveBeenCalledWith(
@@ -173,7 +151,7 @@ describe("DiscordApiClient editInteractionResponse error", () => {
   });
 });
 
-describe("DiscordApiClient createThreadFromMessage success", () => {
+describe("DiscordClient createThreadFromMessage success", () => {
   beforeEach(() => {
     vi.clearAllMocks();
   });
@@ -183,7 +161,7 @@ describe("DiscordApiClient createThreadFromMessage success", () => {
       ok: true,
       json: () => Promise.resolve({ id: "thread-999" }),
     });
-    const client = new DiscordApiClient("test-token");
+    const client = createClient();
 
     const result = await client.createThreadFromMessage(
       "ch-123",
@@ -213,7 +191,7 @@ describe("DiscordApiClient createThreadFromMessage success", () => {
       ok: true,
       json: () => Promise.resolve({}),
     });
-    const client = new DiscordApiClient("test-token");
+    const client = createClient();
 
     const result = await client.createThreadFromMessage(
       "ch-123",
@@ -225,7 +203,7 @@ describe("DiscordApiClient createThreadFromMessage success", () => {
   });
 });
 
-describe("DiscordApiClient createThreadFromMessage error", () => {
+describe("DiscordClient createThreadFromMessage error", () => {
   beforeEach(() => {
     vi.clearAllMocks();
   });
@@ -236,7 +214,7 @@ describe("DiscordApiClient createThreadFromMessage error", () => {
       status: 403,
       text: () => Promise.resolve("Forbidden"),
     });
-    const client = new DiscordApiClient("test-token");
+    const client = createClient();
 
     const result = await client.createThreadFromMessage(
       "ch-123",
@@ -258,7 +236,7 @@ describe("DiscordApiClient createThreadFromMessage error", () => {
 
   it("returns null on network error", async () => {
     mockFetch.mockRejectedValue(new Error("ECONNREFUSED"));
-    const client = new DiscordApiClient("test-token");
+    const client = createClient();
 
     const result = await client.createThreadFromMessage(
       "ch-123",
@@ -290,16 +268,16 @@ const testCommands = [
   },
 ];
 
-describe("DiscordApiClient registerGuildCommands success", () => {
+describe("DiscordClient registerGuildCommands success", () => {
   beforeEach(() => {
     vi.clearAllMocks();
   });
 
   it("registers commands via PUT request", async () => {
     mockFetch.mockResolvedValue({ ok: true });
-    const client = new DiscordApiClient("test-token");
+    const client = createClient();
 
-    await client.registerGuildCommands("app-123", "guild-456", testCommands);
+    await client.registerGuildCommands("guild-456", testCommands);
 
     expect(mockFetch).toHaveBeenCalledWith(
       "https://discord.com/api/v10/applications/app-123/guilds/guild-456/commands",
@@ -323,14 +301,13 @@ describe("DiscordApiClient registerGuildCommands success", () => {
 
   it("filters out commands without definition", async () => {
     mockFetch.mockResolvedValue({ ok: true });
-    const client = new DiscordApiClient("test-token");
+    const client = createClient();
     const commandsWithUndefined = [
       ...testCommands,
       { name: "no-def", execute: vi.fn() },
     ];
 
     await client.registerGuildCommands(
-      "app-123",
       "guild-456",
       commandsWithUndefined as typeof testCommands,
     );
@@ -342,9 +319,9 @@ describe("DiscordApiClient registerGuildCommands success", () => {
 
   it("logs info on success", async () => {
     mockFetch.mockResolvedValue({ ok: true });
-    const client = new DiscordApiClient("test-token");
+    const client = createClient();
 
-    await client.registerGuildCommands("app-123", "guild-456", testCommands);
+    await client.registerGuildCommands("guild-456", testCommands);
 
     expect(mockLogInfo).toHaveBeenCalledWith(
       { guildId: "guild-456", count: 2 },
@@ -353,16 +330,16 @@ describe("DiscordApiClient registerGuildCommands success", () => {
   });
 });
 
-describe("DiscordApiClient registerGuildCommands error", () => {
+describe("DiscordClient registerGuildCommands error", () => {
   beforeEach(() => {
     vi.clearAllMocks();
   });
 
   it("logs error on API failure", async () => {
     mockFetch.mockResolvedValue({ ok: false, status: 401 });
-    const client = new DiscordApiClient("test-token");
+    const client = createClient();
 
-    await client.registerGuildCommands("app-123", "guild-456", testCommands);
+    await client.registerGuildCommands("guild-456", testCommands);
 
     expect(mockLogError).toHaveBeenCalledWith(
       { status: 401, guildId: "guild-456" },
@@ -372,9 +349,9 @@ describe("DiscordApiClient registerGuildCommands error", () => {
 
   it("logs error on network failure", async () => {
     mockFetch.mockRejectedValue(new Error("ECONNREFUSED"));
-    const client = new DiscordApiClient("test-token");
+    const client = createClient();
 
-    await client.registerGuildCommands("app-123", "guild-456", testCommands);
+    await client.registerGuildCommands("guild-456", testCommands);
 
     expect(mockLogError).toHaveBeenCalledWith(
       { err: "ECONNREFUSED", guildId: "guild-456" },
@@ -383,57 +360,48 @@ describe("DiscordApiClient registerGuildCommands error", () => {
   });
 });
 
-describe("DiscordApiClient getFirstMessage success", () => {
+describe("DiscordClient getFirstMessage success", () => {
   beforeEach(() => {
     vi.clearAllMocks();
   });
 
   it("returns content of the oldest message (smallest ID)", async () => {
-    mockFetch.mockResolvedValue({
-      ok: true,
-      json: () =>
-        Promise.resolve([
-          { id: "200", content: "second message" },
-          { id: "100", content: "first message" },
-          { id: "300", content: "third message" },
-        ]),
+    mockFetchChannelMessages.mockResolvedValue({
+      messages: [
+        { id: "200", text: "second message" },
+        { id: "100", text: "first message" },
+        { id: "300", text: "third message" },
+      ],
     });
-    const client = new DiscordApiClient("test-token");
+    const client = createClient();
 
     const result = await client.getFirstMessage("ch-123");
 
     expect(result).toBe("first message");
   });
 
-  it("calls fetch with correct URL and headers", async () => {
-    mockFetch.mockResolvedValue({
-      ok: true,
-      json: () => Promise.resolve([{ id: "100", content: "hello" }]),
+  it("calls adapter fetchChannelMessages with encoded channel ID and limit", async () => {
+    mockFetchChannelMessages.mockResolvedValue({
+      messages: [{ id: "100", text: "hello" }],
     });
-    const client = new DiscordApiClient("test-token");
+    const client = createClient();
 
     await client.getFirstMessage("ch-456");
 
-    expect(mockFetch).toHaveBeenCalledWith(
-      "https://discord.com/api/v10/channels/ch-456/messages?limit=50",
-      {
-        headers: { Authorization: "Bot test-token" },
-      },
-    );
+    expect(mockFetchChannelMessages).toHaveBeenCalledWith("ch-456", {
+      limit: 50,
+    });
   });
 });
 
-describe("DiscordApiClient getFirstMessage boundary", () => {
+describe("DiscordClient getFirstMessage boundary", () => {
   beforeEach(() => {
     vi.clearAllMocks();
   });
 
   it("returns null when messages array is empty", async () => {
-    mockFetch.mockResolvedValue({
-      ok: true,
-      json: () => Promise.resolve([]),
-    });
-    const client = new DiscordApiClient("test-token");
+    mockFetchChannelMessages.mockResolvedValue({ messages: [] });
+    const client = createClient();
 
     const result = await client.getFirstMessage("ch-123");
 
@@ -441,70 +409,151 @@ describe("DiscordApiClient getFirstMessage boundary", () => {
   });
 
   it("returns content when only one message exists", async () => {
-    mockFetch.mockResolvedValue({
-      ok: true,
-      json: () => Promise.resolve([{ id: "100", content: "only message" }]),
+    mockFetchChannelMessages.mockResolvedValue({
+      messages: [{ id: "100", text: "only message" }],
     });
-    const client = new DiscordApiClient("test-token");
+    const client = createClient();
 
     const result = await client.getFirstMessage("ch-123");
 
     expect(result).toBe("only message");
   });
 
-  it("returns null when oldest message content is undefined", async () => {
-    mockFetch.mockResolvedValue({
-      ok: true,
-      json: () => Promise.resolve([{ id: "100" }]),
+  it("returns null when oldest message text is undefined", async () => {
+    mockFetchChannelMessages.mockResolvedValue({
+      messages: [{ id: "100" }],
     });
-    const client = new DiscordApiClient("test-token");
+    const client = createClient();
 
     const result = await client.getFirstMessage("ch-123");
 
     expect(result).toBeNull();
   });
-
-  it("returns empty string when oldest message content is empty string", async () => {
-    mockFetch.mockResolvedValue({
-      ok: true,
-      json: () => Promise.resolve([{ id: "100", content: "" }]),
-    });
-    const client = new DiscordApiClient("test-token");
-
-    const result = await client.getFirstMessage("ch-123");
-
-    expect(result).toBe("");
-  });
 });
 
-describe("DiscordApiClient getFirstMessage error", () => {
+describe("DiscordClient getFirstMessage error", () => {
   beforeEach(() => {
     vi.clearAllMocks();
   });
 
-  it("returns null on API error response", async () => {
-    mockFetch.mockResolvedValue({ ok: false, status: 403 });
-    const client = new DiscordApiClient("test-token");
+  it("returns null on adapter error", async () => {
+    mockFetchChannelMessages.mockRejectedValue(new Error("API error"));
+    const client = createClient();
 
     const result = await client.getFirstMessage("ch-123");
 
     expect(result).toBeNull();
     expect(mockLogError).toHaveBeenCalledWith(
-      { status: 403, channelId: "ch-123" },
-      "Failed to fetch messages",
+      { err: "API error", channelId: "ch-123" },
+      "Message fetch request failed",
     );
   });
+});
 
-  it("returns null on network error", async () => {
-    mockFetch.mockRejectedValue(new Error("ECONNREFUSED"));
-    const client = new DiscordApiClient("test-token");
+describe("DiscordClient isThreadChannel returns true", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
 
-    const result = await client.getFirstMessage("ch-123");
+  it("returns true for public thread (channelType 11)", async () => {
+    mockFetchChannelInfo.mockResolvedValue({
+      metadata: { channelType: 11 },
+    });
+    const client = createClient();
 
-    expect(result).toBeNull();
+    const result = await client.isThreadChannel("ch-123");
+
+    expect(result).toBe(true);
+  });
+
+  it("returns true for private thread (channelType 12)", async () => {
+    mockFetchChannelInfo.mockResolvedValue({
+      metadata: { channelType: 12 },
+    });
+    const client = createClient();
+
+    const result = await client.isThreadChannel("ch-123");
+
+    expect(result).toBe(true);
+  });
+
+  it("returns true for announcement thread (channelType 13)", async () => {
+    mockFetchChannelInfo.mockResolvedValue({
+      metadata: { channelType: 13 },
+    });
+    const client = createClient();
+
+    const result = await client.isThreadChannel("ch-123");
+
+    expect(result).toBe(true);
+  });
+});
+
+describe("DiscordClient isThreadChannel returns false", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it("returns false for regular text channel (channelType 0)", async () => {
+    mockFetchChannelInfo.mockResolvedValue({
+      metadata: { channelType: 0 },
+    });
+    const client = createClient();
+
+    const result = await client.isThreadChannel("ch-123");
+
+    expect(result).toBe(false);
+  });
+
+  it("returns false when channelType is undefined", async () => {
+    mockFetchChannelInfo.mockResolvedValue({
+      metadata: {},
+    });
+    const client = createClient();
+
+    const result = await client.isThreadChannel("ch-123");
+
+    expect(result).toBe(false);
+  });
+
+  it("returns false for channelType 10 (boundary below thread range)", async () => {
+    mockFetchChannelInfo.mockResolvedValue({
+      metadata: { channelType: 10 },
+    });
+    const client = createClient();
+
+    const result = await client.isThreadChannel("ch-123");
+
+    expect(result).toBe(false);
+  });
+
+  it("returns false for channelType 14 (boundary above thread range)", async () => {
+    mockFetchChannelInfo.mockResolvedValue({
+      metadata: { channelType: 14 },
+    });
+    const client = createClient();
+
+    const result = await client.isThreadChannel("ch-123");
+
+    expect(result).toBe(false);
+  });
+});
+
+describe("DiscordClient isThreadChannel error", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it("returns false on adapter error", async () => {
+    mockFetchChannelInfo.mockRejectedValue(new Error("API error"));
+    const client = createClient();
+
+    const result = await client.isThreadChannel("ch-123");
+
+    expect(result).toBe(false);
     expect(mockLogError).toHaveBeenCalledWith(
-      { err: "ECONNREFUSED", channelId: "ch-123" },
-      "Message fetch request failed",
+      { err: "API error", channelId: "ch-123" },
+      "Channel fetch request failed",
     );
   });
 });

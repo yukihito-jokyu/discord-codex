@@ -1,10 +1,10 @@
 import type { AIService } from "@/ai/services/ai.service";
-import type { DiscordApiClient } from "@/infrastructure/discord/discord-api.client";
 import {
   extractMessageData,
   isMentionEvent,
   stripMentionFromContent,
 } from "@/sdk/discord/adapter/gateway-event.adapter";
+import type { DiscordClient } from "@/sdk/discord/discord.client";
 import type {
   GatewayEvent,
   GatewayMessageData,
@@ -14,7 +14,7 @@ import { getLogger } from "@/shared/utils/logger";
 export class MessageHandler {
   constructor(
     private aiService: AIService,
-    private discordApiClient: DiscordApiClient,
+    private discordClient: DiscordClient,
     private applicationId: string,
   ) {}
 
@@ -98,12 +98,12 @@ export class MessageHandler {
     message: GatewayMessageData,
     threadName: string,
   ): Promise<string> {
-    const inThread = await this.discordApiClient.isThreadChannel(
+    const inThread = await this.discordClient.isThreadChannel(
       message.channel_id,
     );
     if (inThread) return message.channel_id;
 
-    const threadId = await this.discordApiClient.createThreadFromMessage(
+    const threadId = await this.discordClient.createThreadFromMessage(
       message.channel_id,
       message.id,
       threadName.slice(0, 100),
@@ -125,7 +125,7 @@ export class MessageHandler {
         { error: result.error.message, channelId: originalChannelId },
         "AI service error",
       );
-      await this.discordApiClient.sendMessage(
+      await this.discordClient.sendMessage(
         targetChannelId,
         // biome-ignore lint/security/noSecrets: static Japanese error message, not a secret
         "エラーが発生しました。しばらくしてからお試しください。",
@@ -142,7 +142,7 @@ export class MessageHandler {
       "Sending AI response",
     );
 
-    const sent = await this.discordApiClient.sendMessage(
+    const sent = await this.discordClient.sendMessage(
       targetChannelId,
       result.value,
     );
