@@ -21,6 +21,7 @@ const mockRedisDisconnect = vi.fn().mockResolvedValue(undefined);
 const mockRedisConnect = vi.fn().mockResolvedValue(undefined);
 const mockRegisterGuildCommands = vi.fn().mockResolvedValue(undefined);
 
+// biome-ignore lint/complexity/noExcessiveLinesPerFunction: mock setup with many vi.doMock calls
 function setupMocks(
   config: Record<string, unknown>,
   envOverrides?: Record<string, unknown>,
