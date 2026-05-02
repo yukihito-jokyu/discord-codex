@@ -93,7 +93,7 @@ describe("createApp with deps", () => {
     const app = createApp({
       interactionHandler: mockHandler as never,
       messageHandler: mockMessageHandler as never,
-      discordApiClient: { sendMessage: vi.fn().mockResolvedValue(true) },
+      discordClient: { sendMessage: vi.fn().mockResolvedValue(true) },
       botToken: "test-token",
       applicationId: "test-app-id",
     });
