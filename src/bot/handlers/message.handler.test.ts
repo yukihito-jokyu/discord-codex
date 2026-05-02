@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { AIService } from "@/ai/services/ai.service";
-import type { DiscordApiClient } from "@/infrastructure/discord/discord-api.client";
+import type { DiscordClient } from "@/sdk/discord/discord.client";
 import type { GatewayEvent } from "@/sdk/discord/types/gateway";
 
 const mockLogInfo = vi.fn();
@@ -30,8 +30,8 @@ vi.mock("@/ai/services/ai.service", () => ({
   })),
 }));
 
-vi.mock("@/infrastructure/discord/discord-api.client", () => ({
-  DiscordApiClient: vi.fn().mockImplementation(() => ({
+vi.mock("@/sdk/discord/discord.client", () => ({
+  DiscordClient: vi.fn().mockImplementation(() => ({
     sendMessage: mockSendMessage,
     createThreadFromMessage: mockCreateThreadFromMessage,
     isThreadChannel: mockIsThreadChannel,
@@ -62,12 +62,12 @@ function createMockDeps() {
     chat: mockChat,
     linkThreadChannel: mockLinkThreadChannel,
   } as unknown as AIService;
-  const discordApiClient = {
+  const discordClient = {
     sendMessage: mockSendMessage,
     createThreadFromMessage: mockCreateThreadFromMessage,
     isThreadChannel: mockIsThreadChannel,
-  } as unknown as DiscordApiClient;
-  return { aiService, discordApiClient };
+  } as unknown as DiscordClient;
+  return { aiService, discordClient };
 }
 
 describe("MessageHandler thread creation", () => {
@@ -75,8 +75,8 @@ describe("MessageHandler thread creation", () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
-    const { aiService, discordApiClient } = createMockDeps();
-    handler = new MessageHandler(aiService, discordApiClient, "app-id");
+    const { aiService, discordClient } = createMockDeps();
+    handler = new MessageHandler(aiService, discordClient, "app-id");
   });
 
   it("creates thread and sends response in thread", async () => {
@@ -115,8 +115,8 @@ describe("MessageHandler in existing thread", () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
-    const { aiService, discordApiClient } = createMockDeps();
-    handler = new MessageHandler(aiService, discordApiClient, "app-id");
+    const { aiService, discordClient } = createMockDeps();
+    handler = new MessageHandler(aiService, discordClient, "app-id");
   });
 
   it("sends response in channel when already in thread", async () => {
@@ -148,8 +148,8 @@ describe("MessageHandler logging", () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
-    const { aiService, discordApiClient } = createMockDeps();
-    handler = new MessageHandler(aiService, discordApiClient, "app-id");
+    const { aiService, discordClient } = createMockDeps();
+    handler = new MessageHandler(aiService, discordClient, "app-id");
   });
 
   it("logs received mention message with user input", async () => {
@@ -190,8 +190,8 @@ describe("MessageHandler filtering", () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
-    const { aiService, discordApiClient } = createMockDeps();
-    handler = new MessageHandler(aiService, discordApiClient, "app-id");
+    const { aiService, discordClient } = createMockDeps();
+    handler = new MessageHandler(aiService, discordClient, "app-id");
   });
 
   it("ignores non-mention events", async () => {
@@ -249,8 +249,8 @@ describe("MessageHandler errors", () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
-    const { aiService, discordApiClient } = createMockDeps();
-    handler = new MessageHandler(aiService, discordApiClient, "app-id");
+    const { aiService, discordClient } = createMockDeps();
+    handler = new MessageHandler(aiService, discordClient, "app-id");
   });
 
   it("logs error and sends error message when AIService fails", async () => {
