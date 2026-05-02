@@ -1,3 +1,4 @@
+import type { Context } from "hono";
 import { Hono } from "hono";
 import type { InteractionHandler } from "@/bot/handlers/interaction.handler";
 import type { MessageHandler } from "@/bot/handlers/message.handler";
@@ -21,7 +22,7 @@ import {
 } from "@/shared/utils/http-status";
 import { getLogger } from "@/shared/utils/logger";
 
-export function createDiscordRoute(deps: {
+type RouteDeps = {
   interactionHandler: InteractionHandler;
   messageHandler: MessageHandler;
   discordApiClient: {
@@ -30,81 +31,96 @@ export function createDiscordRoute(deps: {
   botToken: string;
   applicationId: string;
   allowedUsers?: string[];
-}): Hono {
+};
+
+async function handleGatewayEvent(
+  c: Context,
+  raw: unknown,
+  deps: RouteDeps,
+  log: ReturnType<typeof getLogger>,
+): Promise<Response> {
+  const gatewayToken = c.req.header("x-discord-gateway-token");
+  if (gatewayToken !== deps.botToken) {
+    return c.json({ error: "Invalid gateway token" }, HTTP_UNAUTHORIZED);
+  }
+
+  log.debug(
+    { eventType: (raw as Record<string, unknown>)?.type },
+    "Gateway event received",
+  );
+  const eventResult = parseGatewayEvent(raw);
+
+  if (!eventResult.ok) {
+    log.warn(
+      { error: eventResult.error.message },
+      "Invalid gateway event payload",
+    );
+    return c.json(
+      { ok: false, error: eventResult.error.message },
+      HTTP_BAD_REQUEST,
+    );
+  }
+
+  const eventData = eventResult.value.data as Record<string, unknown>;
+  if (isMentionEvent(eventResult.value, deps.applicationId)) {
+    const author = eventData?.author as Record<string, unknown> | undefined;
+    const authorId = author?.id as string | undefined;
+    if (!isUserAllowed(authorId, deps.allowedUsers)) {
+      log.warn({ authorId }, "Gateway event denied: user not in allowed list");
+      const channelId = eventData.channel_id as string | undefined;
+      if (channelId) {
+        await deps.discordApiClient.sendMessage(
+          channelId,
+          ACCESS_DENIED_MESSAGE,
+        );
+      }
+      return c.json({ ok: true }, HTTP_OK);
+    }
+  }
+
+  await deps.messageHandler.handleGatewayEvent(eventResult.value);
+  return c.json({ ok: true }, HTTP_OK);
+}
+
+async function handleInteraction(
+  c: Context,
+  deps: RouteDeps,
+  log: ReturnType<typeof getLogger>,
+): Promise<Response> {
+  const verifyResult = await verifyDiscordSignature(c);
+  if (verifyResult) return verifyResult;
+
+  const accessResult = await checkAccessControl(c, deps.allowedUsers);
+  if (accessResult) return accessResult;
+
+  const raw = await c.req.json();
+  const result = toDomain(raw);
+
+  if (!result.ok) {
+    log.warn({ error: result.error.message }, "Invalid interaction payload");
+    return c.json({ error: result.error.message }, HTTP_BAD_REQUEST);
+  }
+
+  try {
+    const response = await deps.interactionHandler.handle(result.value);
+    return c.json(toDiscord(response), HTTP_OK);
+  } catch {
+    log.error("Interaction handler error");
+    return c.json({ error: "Internal error" }, HTTP_INTERNAL_SERVER_ERROR);
+  }
+}
+
+export function createDiscordRoute(deps: RouteDeps): Hono {
   const discord = new Hono();
   const log = getLogger();
 
   discord.post("/", async (c) => {
     const gatewayToken = c.req.header("x-discord-gateway-token");
-
     if (gatewayToken) {
-      if (gatewayToken !== deps.botToken) {
-        return c.json({ error: "Invalid gateway token" }, HTTP_UNAUTHORIZED);
-      }
-
       const raw = await c.req.json();
-      log.debug(
-        { eventType: (raw as Record<string, unknown>)?.type },
-        "Gateway event received",
-      );
-      const eventResult = parseGatewayEvent(raw);
-
-      if (!eventResult.ok) {
-        log.warn(
-          { error: eventResult.error.message },
-          "Invalid gateway event payload",
-        );
-        return c.json(
-          { ok: false, error: eventResult.error.message },
-          HTTP_BAD_REQUEST,
-        );
-      }
-
-      const eventData = eventResult.value.data as Record<string, unknown>;
-      if (isMentionEvent(eventResult.value, deps.applicationId)) {
-        const author = eventData?.author as Record<string, unknown> | undefined;
-        const authorId = author?.id as string | undefined;
-        if (!isUserAllowed(authorId, deps.allowedUsers)) {
-          log.warn(
-            { authorId },
-            "Gateway event denied: user not in allowed list",
-          );
-          const channelId = eventData.channel_id as string | undefined;
-          if (channelId) {
-            await deps.discordApiClient.sendMessage(
-              channelId,
-              ACCESS_DENIED_MESSAGE,
-            );
-          }
-          return c.json({ ok: true }, HTTP_OK);
-        }
-      }
-
-      await deps.messageHandler.handleGatewayEvent(eventResult.value);
-      return c.json({ ok: true }, HTTP_OK);
+      return handleGatewayEvent(c, raw, deps, log);
     }
-
-    const verifyResult = await verifyDiscordSignature(c);
-    if (verifyResult) return verifyResult;
-
-    const accessResult = await checkAccessControl(c, deps.allowedUsers);
-    if (accessResult) return accessResult;
-
-    const raw = await c.req.json();
-    const result = toDomain(raw);
-
-    if (!result.ok) {
-      log.warn({ error: result.error.message }, "Invalid interaction payload");
-      return c.json({ error: result.error.message }, HTTP_BAD_REQUEST);
-    }
-
-    try {
-      const response = await deps.interactionHandler.handle(result.value);
-      return c.json(toDiscord(response), HTTP_OK);
-    } catch {
-      log.error("Interaction handler error");
-      return c.json({ error: "Internal error" }, HTTP_INTERNAL_SERVER_ERROR);
-    }
+    return handleInteraction(c, deps, log);
   });
 
   return discord;

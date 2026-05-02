@@ -12,7 +12,7 @@ vi.mock("@/shared/utils/logger", () => ({
 
 const JINA_BASE = "https://r.jina.ai";
 
-describe("WebFetcherClient success", () => {
+describe("WebFetcherClient fetch", () => {
   let client: WebFetcherClient;
 
   beforeEach(() => {
@@ -21,11 +21,13 @@ describe("WebFetcherClient success", () => {
   });
 
   it("fetches content via Jina Reader API", async () => {
-    const mockFetch = vi.fn().mockResolvedValue({
-      ok: true,
-      text: () => Promise.resolve("Article content here"),
-    });
-    vi.stubGlobal("fetch", mockFetch);
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue({
+        ok: true,
+        text: () => Promise.resolve("Article content here"),
+      }),
+    );
 
     const result = await client.fetchContent("https://example.com/article");
 
@@ -33,12 +35,21 @@ describe("WebFetcherClient success", () => {
     if (result.ok) {
       expect(result.value).toContain("Article content here");
     }
-    expect(mockFetch).toHaveBeenCalledWith(
+    expect(vi.mocked(fetch)).toHaveBeenCalledWith(
       `${JINA_BASE}/https://example.com/article`,
       expect.objectContaining({
         headers: { Accept: "text/plain" },
       }),
     );
+  });
+});
+
+describe("WebFetcherClient content truncation", () => {
+  let client: WebFetcherClient;
+
+  beforeEach(() => {
+    vi.restoreAllMocks();
+    client = new WebFetcherClient();
   });
 
   it("truncates content exceeding max length", async () => {
