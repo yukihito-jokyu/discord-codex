@@ -67,6 +67,77 @@ pnpm --version   # 10.x.x
 task --version   # 3.x.x
 ```
 
+## Discord Botの設定
+
+### 1. Discordアプリケーションの作成
+
+1. [Discord Developer Portal](https://discord.com/developers/applications) にアクセスし、「New Application」をクリック
+2. アプリケーション名を入力して作成
+
+### 2. 認証情報の取得
+
+**General Information** ページで以下を取得し、`.env`に設定:
+
+| 項目 | 取得先 | 環境変数 |
+| --- | --- | --- |
+| APPLICATION ID | General Information | `DISCORD_APPLICATION_ID` |
+| PUBLIC KEY | General Information | `DISCORD_PUBLIC_KEY` |
+
+**Bot** ページで「Reset Token」をクリックし、Bot Tokenを取得:
+
+| 項目 | 取得先 | 環境変数 |
+| --- | --- | --- |
+| Bot Token | Bot ページ | `DISCORD_BOT_TOKEN` |
+
+### 3. Gateway Intentsの有効化
+
+**Bot** ページの Privileged Gateway Intents で **Message Content Intent** のみ有効にする。
+Presence Intent と Server Members Intent は不要。
+
+### 4. Botをサーバーに追加
+
+**Installation** ページ（または **OAuth2** ページ）でURL生成を行う:
+
+- スコープ: `bot`, `applications.commands`
+- Bot Permissions:
+  - View Channels
+  - Send Messages
+  - Send Messages in Threads
+  - Create Public Threads
+  - Read Message History
+
+生成されたURLからBotをサーバーに追加する。
+
+### 5. サーバーIDの取得
+
+Discordのユーザー設定で「開発者モード」を有効にし、Botを追加したサーバーを右クリックしてIDをコピー。
+`DISCORD_GUILD_ID` に設定する。
+
+### 6. Interactions Endpoint URLの設定
+
+**General Information** ページの `INTERACTIONS ENDPOINT URL` にトンネルURLを設定:
+
+```
+https://your-tunnel-domain.com/api/webhooks/discord
+```
+
+保存時にDiscordが署名検証リクエストを送信するため、事前にサーバーとトンネルを起動しておく必要がある。
+
+### 環境変数一覧
+
+| 環境変数 | 説明 | 必須 |
+| --- | --- | --- |
+| `DISCORD_BOT_TOKEN` | Bot認証トークン | ✅ |
+| `DISCORD_APPLICATION_ID` | アプリケーションID | ✅ |
+| `DISCORD_PUBLIC_KEY` | Ed25519公開鍵（Webhook署名検証用） | ✅ |
+| `DISCORD_GUILD_ID` | サーバーID（スラッシュコマンド登録先） | ✅ |
+| `OPENAI_API_KEY` | OpenAI APIキー（`CODEX_API_KEY`未設定時のフォールバック） | ✅ |
+| `CODEX_API_KEY` | Codex APIキー（`OPENAI_API_KEY`より優先） | - |
+| `CODEX_BASE_URL` | Codex APIのエンドポイント（デフォルト: OpenAI） | - |
+| `CODEX_MODEL` | 使用モデル名（デフォルト: `codex-mini`） | - |
+| `TUNNEL_TOKEN` | Cloudflare Tunnelトークン（ローカル開発時） | - |
+| `REDIS_URL` | Redis接続URL（デフォルト: `redis://localhost:6379`） | - |
+
 ## PR Agent
 
 PRのコメント欄で以下のコマンドを入力すると、AIが自動で処理します。
