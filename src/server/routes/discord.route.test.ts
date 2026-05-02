@@ -40,9 +40,12 @@ const mockSendMessage = vi.fn().mockResolvedValue(true);
 const mockCheckAccessControl = vi.fn().mockResolvedValue(null);
 const mockIsUserAllowed = vi.fn().mockReturnValue(true);
 
+let actualAccessControl: typeof import("@/server/middleware/access-control");
+
 vi.mock("@/server/middleware/access-control", async (importOriginal) => {
   const actual =
     await importOriginal<typeof import("@/server/middleware/access-control")>();
+  actualAccessControl = actual;
   return {
     ...actual,
     checkAccessControl: (...args: unknown[]) => mockCheckAccessControl(...args),
@@ -60,6 +63,20 @@ function createMockMessageHandler() {
   return {
     handleGatewayEvent: mockHandleGatewayEvent,
   } as unknown as MessageHandler;
+}
+
+function postGatewayEvent(
+  app: ReturnType<typeof createDiscordRoute>,
+  event: unknown,
+) {
+  return app.request("/", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      "x-discord-gateway-token": "test-bot-token",
+    },
+    body: JSON.stringify(event),
+  });
 }
 
 const testDeps = {
@@ -298,7 +315,7 @@ describe("createDiscordRoute - gateway invalid payload", () => {
   });
 });
 
-describe("createDiscordRoute - gateway mention access control", () => {
+describe("createDiscordRoute - gateway mention access denial", () => {
   beforeEach(() => {
     vi.restoreAllMocks();
     mockParseGatewayEvent.mockReset();
@@ -320,28 +337,48 @@ describe("createDiscordRoute - gateway mention access control", () => {
     mockIsUserAllowed.mockReturnValue(false);
     mockSendMessage.mockResolvedValue(true);
 
-    const app = createDiscordRoute(testDeps);
-
-    const res = await app.request("/", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        "x-discord-gateway-token": "test-bot-token",
-      },
-      body: JSON.stringify(event),
-    });
+    const res = await postGatewayEvent(createDiscordRoute(testDeps), event);
 
     expect(res.status).toBe(200);
     expect(await res.json()).toEqual({ ok: true });
     expect(mockSendMessage).toHaveBeenCalledWith(
       "ch-123",
-      "このBotを利用する権限がありません。",
+      actualAccessControl.ACCESS_DENIED_MESSAGE,
     );
     expect(mockHandleGatewayEvent).not.toHaveBeenCalled();
     expect(mockLog.warn).toHaveBeenCalledWith(
       { authorId: "disallowed-user" },
       "Gateway event denied: user not in allowed list",
     );
+  });
+
+  it("denies mention event without channel_id and does not send message", async () => {
+    const event = {
+      type: "GATEWAY_MESSAGE_CREATE",
+      timestamp: 1,
+      data: { author: { id: "disallowed-user" } },
+    };
+    mockParseGatewayEvent.mockReturnValue({ ok: true, value: event });
+    mockIsMentionEvent.mockReturnValue(true);
+    mockIsUserAllowed.mockReturnValue(false);
+
+    const res = await postGatewayEvent(createDiscordRoute(testDeps), event);
+
+    expect(res.status).toBe(200);
+    expect(await res.json()).toEqual({ ok: true });
+    expect(mockSendMessage).not.toHaveBeenCalled();
+    expect(mockHandleGatewayEvent).not.toHaveBeenCalled();
+  });
+});
+
+describe("createDiscordRoute - gateway mention access allowance", () => {
+  beforeEach(() => {
+    vi.restoreAllMocks();
+    mockParseGatewayEvent.mockReset();
+    mockHandleGatewayEvent.mockReset();
+    mockIsMentionEvent.mockReset();
+    mockIsUserAllowed.mockReset();
+    mockSendMessage.mockReset();
   });
 
   it("allows mention event from allowed user", async () => {
@@ -355,47 +392,11 @@ describe("createDiscordRoute - gateway mention access control", () => {
     mockIsUserAllowed.mockReturnValue(true);
     mockHandleGatewayEvent.mockResolvedValue(undefined);
 
-    const app = createDiscordRoute(testDeps);
-
-    const res = await app.request("/", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        "x-discord-gateway-token": "test-bot-token",
-      },
-      body: JSON.stringify(event),
-    });
+    const res = await postGatewayEvent(createDiscordRoute(testDeps), event);
 
     expect(res.status).toBe(200);
     expect(mockSendMessage).not.toHaveBeenCalled();
     expect(mockHandleGatewayEvent).toHaveBeenCalledWith(event);
-  });
-
-  it("denies mention event without channel_id and does not send message", async () => {
-    const event = {
-      type: "GATEWAY_MESSAGE_CREATE",
-      timestamp: 1,
-      data: { author: { id: "disallowed-user" } },
-    };
-    mockParseGatewayEvent.mockReturnValue({ ok: true, value: event });
-    mockIsMentionEvent.mockReturnValue(true);
-    mockIsUserAllowed.mockReturnValue(false);
-
-    const app = createDiscordRoute(testDeps);
-
-    const res = await app.request("/", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        "x-discord-gateway-token": "test-bot-token",
-      },
-      body: JSON.stringify(event),
-    });
-
-    expect(res.status).toBe(200);
-    expect(await res.json()).toEqual({ ok: true });
-    expect(mockSendMessage).not.toHaveBeenCalled();
-    expect(mockHandleGatewayEvent).not.toHaveBeenCalled();
   });
 
   it("skips access control for non-mention gateway event", async () => {
@@ -408,16 +409,7 @@ describe("createDiscordRoute - gateway mention access control", () => {
     mockIsMentionEvent.mockReturnValue(false);
     mockHandleGatewayEvent.mockResolvedValue(undefined);
 
-    const app = createDiscordRoute(testDeps);
-
-    const res = await app.request("/", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        "x-discord-gateway-token": "test-bot-token",
-      },
-      body: JSON.stringify(event),
-    });
+    const res = await postGatewayEvent(createDiscordRoute(testDeps), event);
 
     expect(res.status).toBe(200);
     expect(mockIsUserAllowed).not.toHaveBeenCalled();
