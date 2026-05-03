@@ -73,9 +73,9 @@ function setupMocks(
   vi.doMock("@chat-adapter/discord", () => ({
     createDiscordAdapter: vi.fn().mockReturnValue({}),
   }));
-  vi.doMock("@/ai/client/codex.client", () => ({
+  vi.doMock("@/ai/client/openai.client", () => ({
     // biome-ignore lint/complexity/useArrowFunction: constructor mock requires function expression
-    CodexClient: vi.fn().mockImplementation(function () {
+    OpenAIClient: vi.fn().mockImplementation(function () {
       return {};
     }),
   }));
@@ -298,12 +298,12 @@ describe("bootstrap API key selection", () => {
       { CODEX_API_KEY: "codex-key", OPENAI_API_KEY: "openai-key" },
     );
 
-    const { CodexClient } = await import("@/ai/client/codex.client");
+    const { OpenAIClient } = await import("@/ai/client/openai.client");
     const { bootstrap } = await import("@/app/bootstrap");
 
     bootstrap();
 
-    expect(CodexClient).toHaveBeenCalledWith(
+    expect(OpenAIClient).toHaveBeenCalledWith(
       "codex-key",
       expect.objectContaining({ baseUrl: undefined, model: undefined }),
     );
@@ -319,19 +319,19 @@ describe("bootstrap API key selection", () => {
       { CODEX_API_KEY: undefined, OPENAI_API_KEY: "openai-key" },
     );
 
-    const { CodexClient } = await import("@/ai/client/codex.client");
+    const { OpenAIClient } = await import("@/ai/client/openai.client");
     const { bootstrap } = await import("@/app/bootstrap");
 
     bootstrap();
 
-    expect(CodexClient).toHaveBeenCalledWith(
+    expect(OpenAIClient).toHaveBeenCalledWith(
       "openai-key",
       expect.objectContaining({ baseUrl: undefined, model: undefined }),
     );
   });
 });
 
-describe("bootstrap CodexClient options", () => {
+describe("bootstrap OpenAIClient options", () => {
   beforeEach(() => {
     vi.resetModules();
     vi.restoreAllMocks();
@@ -339,7 +339,7 @@ describe("bootstrap CodexClient options", () => {
     mockCreateApp.mockReturnValue({ fetch: vi.fn() });
   });
 
-  it("passes CODEX_BASE_URL and CODEX_MODEL to CodexClient", async () => {
+  it("passes CODEX_BASE_URL and CODEX_MODEL to OpenAIClient", async () => {
     setupMocks(
       {
         bot: { defaultModel: "codex-mini", maxTokens: 4096, timeoutMs: 30000 },
@@ -352,12 +352,12 @@ describe("bootstrap CodexClient options", () => {
       },
     );
 
-    const { CodexClient } = await import("@/ai/client/codex.client");
+    const { OpenAIClient } = await import("@/ai/client/openai.client");
     const { bootstrap } = await import("@/app/bootstrap");
 
     bootstrap();
 
-    expect(CodexClient).toHaveBeenCalledWith(
+    expect(OpenAIClient).toHaveBeenCalledWith(
       "test-key",
       expect.objectContaining({
         baseUrl: "https://custom.api",

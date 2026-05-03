@@ -1,5 +1,5 @@
 import { createDiscordAdapter } from "@chat-adapter/discord";
-import { CodexClient } from "@/ai/client/codex.client";
+import { OpenAIClient } from "@/ai/client/openai.client";
 import { AIService } from "@/ai/services/ai.service";
 import { SummaryService } from "@/ai/services/summary.service";
 import { loadConfig } from "@/app/config/bot.config";
@@ -20,13 +20,13 @@ import { createLogger, getLogger } from "@/shared/utils/logger";
 function createAIService(): {
   aiService: AIService;
   redis: RedisClient;
-  codex: CodexClient;
+  openai: OpenAIClient;
 } {
   const codexApiKey = env.CODEX_API_KEY ?? env.OPENAI_API_KEY;
   if (!codexApiKey) {
     throw new Error("CODEX_API_KEY or OPENAI_API_KEY is required");
   }
-  const codex = new CodexClient(codexApiKey, {
+  const openai = new OpenAIClient(codexApiKey, {
     baseUrl: env.CODEX_BASE_URL,
     model: env.CODEX_MODEL,
   });
@@ -35,10 +35,10 @@ function createAIService(): {
   redis.connect().catch((err) => {
     getLogger().warn({ err: String(err) }, "Redis connection failed");
   });
-  return { aiService: new AIService(codex, redis), redis, codex };
+  return { aiService: new AIService(openai, redis), redis, openai };
 }
 
-function createDiscordDeps(aiService: AIService, codex: CodexClient) {
+function createDiscordDeps(aiService: AIService, openai: OpenAIClient) {
   const botToken = env.DISCORD_BOT_TOKEN;
   const applicationId = env.DISCORD_APPLICATION_ID;
   if (!botToken) throw new Error("DISCORD_BOT_TOKEN is required");
@@ -50,7 +50,7 @@ function createDiscordDeps(aiService: AIService, codex: CodexClient) {
   });
   const discordClient = new DiscordClient(adapter, botToken, applicationId);
   const chatCommand = new ChatCommand(aiService, discordClient);
-  const summaryService = new SummaryService(codex, new WebFetcherClient());
+  const summaryService = new SummaryService(openai, new WebFetcherClient());
   const summaryCommand = new SummaryCommand(summaryService, discordClient);
   const commands = [new PingCommand(), chatCommand, summaryCommand];
   const messageHandler = new MessageHandler(
@@ -88,14 +88,14 @@ export function bootstrap() {
   const log = getLogger();
   log.debug({ config }, "Config loaded");
 
-  const { aiService, redis, codex } = createAIService();
+  const { aiService, redis, openai } = createAIService();
   const {
     botToken,
     applicationId,
     interactionHandler,
     messageHandler,
     discordClient,
-  } = createDiscordDeps(aiService, codex);
+  } = createDiscordDeps(aiService, openai);
 
   const app = createApp({
     interactionHandler,
