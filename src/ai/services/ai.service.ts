@@ -16,13 +16,9 @@ export class AIService {
 
   async chat(channelId: string, userMessage: string): Promise<Result<string>> {
     let messages: ChatMessage[];
+    let stored: string | null;
     try {
-      const stored = await this.redis.get(`${MESSAGES_KEY_PREFIX}${channelId}`);
-      if (stored) {
-        messages = JSON.parse(stored) as ChatMessage[];
-      } else {
-        messages = [{ role: "system", content: buildSystemPrompt() }];
-      }
+      stored = await this.redis.get(`${MESSAGES_KEY_PREFIX}${channelId}`);
     } catch (e) {
       return err(
         new ExternalServiceError(
@@ -32,7 +28,22 @@ export class AIService {
       );
     }
 
+    try {
+      if (stored) {
+        messages = JSON.parse(stored) as ChatMessage[];
+      } else {
+        messages = [{ role: "system", content: buildSystemPrompt() }];
+      }
+    } catch {
+      messages = [{ role: "system", content: buildSystemPrompt() }];
+    }
+
     messages.push({ role: "user", content: userMessage });
+
+    const MAX_MESSAGES = 50;
+    if (messages.length > MAX_MESSAGES) {
+      messages = [messages[0], ...messages.slice(-(MAX_MESSAGES - 1))];
+    }
 
     let responseContent: string;
     try {
