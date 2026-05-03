@@ -444,3 +444,91 @@ describe("AIService linkThreadChannel error", () => {
     ).rejects.toThrow("write error");
   });
 });
+
+describe("AIService chat message truncation at MAX_MESSAGES", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  function buildHistory(messageCount: number): string {
+    const messages: Array<{ role: string; content: string }> = [
+      { role: "system", content: "System prompt" },
+    ];
+    for (let i = 1; i < messageCount; i++) {
+      messages.push({
+        role: i % 2 === 1 ? "user" : "assistant",
+        content: `Message ${i}`,
+      });
+    }
+    return JSON.stringify(messages);
+  }
+
+  it("truncates old messages when history exceeds 50", async () => {
+    mockRedisGet.mockResolvedValue(buildHistory(51));
+    mockChat.mockResolvedValue({ response: "Truncated", usage: null });
+    mockRedisSet.mockResolvedValue(undefined);
+
+    const service = await createService();
+    await service.chat("channel-trunc", "New message");
+
+    const saved = JSON.parse(mockRedisSet.mock.calls[0][1] as string) as Array<{
+      role: string;
+      content: string;
+    }>;
+    // 50 (truncated) + 1 (assistant response) = 51 saved
+    expect(saved).toHaveLength(51);
+    expect(saved[0].role).toBe("system");
+    // Early messages removed: Message 1 & 2 truncated, Message 3 is now index 1
+    expect(saved[1].content).toBe("Message 3");
+    expect(saved[49].role).toBe("user");
+    expect(saved[49].content).toBe("New message");
+    expect(saved[50].role).toBe("assistant");
+    expect(saved[50].content).toBe("Truncated");
+  });
+
+  it("does not truncate when total is exactly 50 before assistant", async () => {
+    mockRedisGet.mockResolvedValue(buildHistory(49));
+    mockChat.mockResolvedValue({ response: "Exact", usage: null });
+    mockRedisSet.mockResolvedValue(undefined);
+
+    const service = await createService();
+    await service.chat("channel-exact", "New message");
+
+    const saved = JSON.parse(mockRedisSet.mock.calls[0][1] as string) as Array<{
+      role: string;
+      content: string;
+    }>;
+    // 49 (from Redis) + 1 (user) + 1 (assistant) = 51, no truncation
+    expect(saved).toHaveLength(51);
+    expect(saved[1].content).toBe("Message 1");
+    expect(saved[49].content).toBe("New message");
+    expect(saved[50].content).toBe("Exact");
+  });
+});
+
+describe("AIService chat invalid JSON in Redis", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mockRedisGet.mockResolvedValue("invalid json{");
+    mockChat.mockResolvedValue({
+      response: "Fallback response",
+      usage: null,
+    });
+    mockRedisSet.mockResolvedValue(undefined);
+  });
+
+  it("falls back to system prompt when stored JSON is invalid", async () => {
+    const service = await createService();
+    await service.chat("channel-bad-json", "Hello");
+
+    expect(mockChat).toHaveBeenCalledWith(
+      expect.arrayContaining([
+        expect.objectContaining({
+          role: "system",
+          content: expect.stringContaining("AIアシスタント"),
+        }),
+        expect.objectContaining({ role: "user", content: "Hello" }),
+      ]),
+    );
+  });
+});
