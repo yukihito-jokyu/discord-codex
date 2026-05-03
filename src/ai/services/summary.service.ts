@@ -3,7 +3,7 @@ import { ExternalServiceError } from "@/shared/types/errors";
 import { err, ok, type Result } from "@/shared/types/result";
 import { formatForDiscord } from "@/shared/utils/format";
 import { getLogger } from "@/shared/utils/logger";
-import type { CodexClient } from "../client/codex.client";
+import type { OpenAIClient } from "../client/openai.client";
 import {
   buildSummaryPrompt,
   type FetchedContent,
@@ -11,7 +11,7 @@ import {
 
 export class SummaryService {
   constructor(
-    private client: CodexClient,
+    private client: OpenAIClient,
     private webFetcher: WebFetcherClient,
   ) {}
 
@@ -38,12 +38,14 @@ export class SummaryService {
     const prompt = buildSummaryPrompt(contents);
 
     try {
-      const result = await this.client.chat(null, prompt);
+      const result = await this.client.chat([
+        { role: "user", content: prompt },
+      ]);
       return ok(formatForDiscord(result.response));
     } catch (e) {
       return err(
         new ExternalServiceError(
-          "Codex",
+          "OpenAI",
           e instanceof Error ? e.message : String(e),
         ),
       );
