@@ -2,7 +2,8 @@ bot:
   defaultModel: "codex-mini"
   maxTokens: 4096
   timeoutMs: 30000
-  allowedUsers: []
+  allowedUsers:
+    - "943827492270137384"
 
 server:
   port: 3000

@@ -2,7 +2,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { WebFetcherClient } from "@/infrastructure/web/web-fetcher.client";
 import { ExternalServiceError } from "@/shared/types/errors";
 import { err, ok } from "@/shared/types/result";
-import type { ChatResult, CodexClient } from "../client/codex.client";
+import type { ChatResult, OpenAIClient } from "../client/openai.client";
 import { SummaryService } from "./summary.service";
 
 vi.mock("@/shared/utils/logger", () => ({
@@ -14,15 +14,14 @@ vi.mock("@/shared/utils/logger", () => ({
   }),
 }));
 
-function createMockCodexClient(response: string): CodexClient {
+function createMockOpenAIClient(response: string): OpenAIClient {
   const chatResult: ChatResult = {
     response,
-    threadId: "thread-123",
     usage: null,
   };
   return {
     chat: vi.fn().mockResolvedValue(chatResult),
-  } as unknown as CodexClient;
+  } as unknown as OpenAIClient;
 }
 
 function createMockWebFetcher(results: Map<string, string>): WebFetcherClient {
@@ -45,7 +44,7 @@ describe("SummaryService", () => {
 
   it(// biome-ignore lint/security/noSecrets: test description, not a secret
   "URL一覧を渡して要約結果を返す", async () => {
-    const client = createMockCodexClient("AI summary");
+    const client = createMockOpenAIClient("AI summary");
     const fetcher = createMockWebFetcher(
       new Map([["https://example.com", "page content"]]),
     );
@@ -59,7 +58,7 @@ describe("SummaryService", () => {
   });
 
   it("fetches content before calling AI", async () => {
-    const client = createMockCodexClient("response");
+    const client = createMockOpenAIClient("response");
     const fetcher = createMockWebFetcher(
       new Map([["https://example.com", "fetched text"]]),
     );
@@ -67,12 +66,14 @@ describe("SummaryService", () => {
 
     await service.summarize(["https://example.com"]);
     expect(fetcher.fetchContent).toHaveBeenCalledWith("https://example.com");
-    expect(client.chat).toHaveBeenCalledWith(null, expect.any(String));
+    expect(client.chat).toHaveBeenCalledWith([
+      { role: "user", content: expect.any(String) },
+    ]);
   });
 
   it(// biome-ignore lint/security/noSecrets: test description, not a secret
   "全URL取得失敗時はerrを返す", async () => {
-    const client = createMockCodexClient("response");
+    const client = createMockOpenAIClient("response");
     const fetcher = createMockWebFetcher(new Map());
     const service = new SummaryService(client, fetcher);
 
@@ -81,10 +82,10 @@ describe("SummaryService", () => {
   });
 
   it(// biome-ignore lint/security/noSecrets: test description, not a secret
-  "Codexエラー時はerrを返す", async () => {
+  "OpenAIエラー時はerrを返す", async () => {
     const client = {
       chat: vi.fn().mockRejectedValue(new Error("API error")),
-    } as unknown as CodexClient;
+    } as unknown as OpenAIClient;
     const fetcher = createMockWebFetcher(
       new Map([["https://example.com", "text"]]),
     );

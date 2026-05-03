@@ -5,9 +5,9 @@ const mockRedisGet = vi.fn();
 const mockRedisSet = vi.fn();
 const mockRedisDelete = vi.fn();
 
-vi.mock("../client/codex.client", () => ({
+vi.mock("../client/openai.client", () => ({
   // biome-ignore lint/complexity/useArrowFunction: constructor mock requires function expression
-  CodexClient: vi.fn().mockImplementation(function () {
+  OpenAIClient: vi.fn().mockImplementation(function () {
     return { chat: mockChat };
   }),
 }));
@@ -33,10 +33,10 @@ vi.mock("@/shared/utils/logger", () => ({
 
 async function createService() {
   const { AIService } = await import("./ai.service");
-  const { CodexClient } = await import("../client/codex.client");
+  const { OpenAIClient } = await import("../client/openai.client");
   const { RedisClient } = await import("@/infrastructure/redis/redis.client");
   return new AIService(
-    new (CodexClient as ReturnType<typeof vi.fn>)(),
+    new (OpenAIClient as ReturnType<typeof vi.fn>)(),
     new (RedisClient as ReturnType<typeof vi.fn>)(),
   );
 }
@@ -47,13 +47,12 @@ describe("AIService chat new conversation", () => {
     mockRedisGet.mockResolvedValue(null);
     mockChat.mockResolvedValue({
       response: "AI response",
-      threadId: "thread-abc",
       usage: null,
     });
     mockRedisSet.mockResolvedValue(undefined);
   });
 
-  it("creates new thread when no mapping exists", async () => {
+  it("starts with system prompt when no Redis history", async () => {
     const service = await createService();
     const result = await service.chat("channel-1", "Hello");
     expect(result.ok).toBe(true);
@@ -62,41 +61,73 @@ describe("AIService chat new conversation", () => {
     }
   });
 
-  it("saves thread mapping with TTL", async () => {
+  it("saves JSON message history to Redis with TTL", async () => {
     const service = await createService();
     await service.chat("channel-1", "Hello");
     expect(mockRedisSet).toHaveBeenCalledWith(
-      "thread:channel-1",
-      "thread-abc",
+      "messages:channel-1",
+      expect.any(String),
       { ttlMs: 86400000 },
     );
+    const savedValue = JSON.parse(
+      mockRedisSet.mock.calls[0][1] as string,
+    ) as Array<{ role: string; content: string }>;
+    expect(savedValue).toHaveLength(3);
+    expect(savedValue[0].role).toBe("system");
+    expect(savedValue[1].role).toBe("user");
+    expect(savedValue[1].content).toBe("Hello");
+    expect(savedValue[2].role).toBe("assistant");
+    expect(savedValue[2].content).toBe("AI response");
   });
 
-  it("passes null threadId to client when no mapping", async () => {
+  it("passes messages array with system prompt to client.chat", async () => {
     const service = await createService();
     await service.chat("channel-1", "Hello");
-    expect(mockChat).toHaveBeenCalledWith(null, expect.any(String));
+    expect(mockChat).toHaveBeenCalledWith(
+      expect.arrayContaining([
+        expect.objectContaining({
+          role: "system",
+          content: expect.stringContaining("AIアシスタント"),
+        }),
+        expect.objectContaining({ role: "user", content: "Hello" }),
+      ]),
+    );
   });
 });
 
 describe("AIService chat existing conversation", () => {
+  const existingHistory = JSON.stringify([
+    { role: "system", content: "You are helpful" },
+    { role: "user", content: "First message" },
+    { role: "assistant", content: "First response" },
+  ]);
+
   beforeEach(() => {
     vi.clearAllMocks();
-    mockRedisGet.mockResolvedValue("thread-existing");
+    mockRedisGet.mockResolvedValue(existingHistory);
     mockChat.mockResolvedValue({
       response: "Continued response",
-      threadId: "thread-existing",
       usage: null,
     });
     mockRedisSet.mockResolvedValue(undefined);
   });
 
-  it("resumes existing thread from Redis mapping", async () => {
+  it("appends user message to existing history", async () => {
     const service = await createService();
     const result = await service.chat("channel-2", "Continue");
     expect(mockChat).toHaveBeenCalledWith(
-      "thread-existing",
-      expect.any(String),
+      expect.arrayContaining([
+        expect.objectContaining({ role: "system", content: "You are helpful" }),
+        expect.objectContaining({
+          role: "user",
+          content: "First message",
+        }),
+        expect.objectContaining({
+          role: "assistant",
+          content: "First response",
+        }),
+        expect.objectContaining({ role: "user", content: "Continue" }),
+      ]),
     );
     expect(result.ok).toBe(true);
     if (result.ok) {
@@ -104,10 +135,15 @@ describe("AIService chat existing conversation", () => {
     }
   });
 
-  it("sends only user message without system prompt on resume", async () => {
+  it("appends assistant response and saves full history", async () => {
     const service = await createService();
     await service.chat("channel-2", "Continue");
-    expect(mockChat).toHaveBeenCalledWith("thread-existing", "Continue");
+    const savedValue = JSON.parse(
+      mockRedisSet.mock.calls[0][1] as string,
+    ) as Array<{ role: string; content: string }>;
+    expect(savedValue).toHaveLength(5);
+    expect(savedValue[4].role).toBe("assistant");
+    expect(savedValue[4].content).toBe("Continued response");
   });
 });
 
@@ -139,12 +175,12 @@ describe("AIService chat error handling Redis get", () => {
   });
 });
 
-describe("AIService chat error handling Codex", () => {
+describe("AIService chat error handling OpenAI", () => {
   beforeEach(() => {
     vi.clearAllMocks();
   });
 
-  it("returns ExternalServiceError for Codex on client failure", async () => {
+  it("returns ExternalServiceError for OpenAI on client failure", async () => {
     mockRedisGet.mockResolvedValue(null);
     mockChat.mockRejectedValue(new Error("API rate limit"));
     const service = await createService();
@@ -152,12 +188,12 @@ describe("AIService chat error handling Codex", () => {
     expect(result.ok).toBe(false);
     if (!result.ok) {
       expect(result.error.name).toBe("ExternalServiceError");
-      expect(result.error.message).toContain("Codex");
+      expect(result.error.message).toContain("OpenAI");
       expect(result.error.message).toContain("API rate limit");
     }
   });
 
-  it("handles non-Error thrown value from Codex", async () => {
+  it("handles non-Error thrown value from OpenAI", async () => {
     mockRedisGet.mockResolvedValue(null);
     mockChat.mockRejectedValue("string error");
     const service = await createService();
@@ -178,7 +214,6 @@ describe("AIService chat error handling Redis set", () => {
     mockRedisGet.mockResolvedValue(null);
     mockChat.mockResolvedValue({
       response: "AI response",
-      threadId: "thread-abc",
       usage: null,
     });
     mockRedisSet.mockRejectedValue(new Error("write failed"));
@@ -196,7 +231,6 @@ describe("AIService chat error handling Redis set", () => {
     mockRedisGet.mockResolvedValue(null);
     mockChat.mockResolvedValue({
       response: "AI response",
-      threadId: "thread-abc",
       usage: null,
     });
     mockRedisSet.mockRejectedValue(99);
@@ -215,18 +249,21 @@ describe("AIService chat includes system prompt", () => {
     mockRedisGet.mockResolvedValue(null);
     mockChat.mockResolvedValue({
       response: "AI response",
-      threadId: "thread-sys",
       usage: null,
     });
     mockRedisSet.mockResolvedValue(undefined);
   });
 
-  it("includes system prompt in client input", async () => {
+  it("includes system prompt in messages array", async () => {
     const service = await createService();
     await service.chat("channel-sys", "Hello");
     expect(mockChat).toHaveBeenCalledWith(
-      null,
-      expect.stringContaining("AIアシスタント"),
+      expect.arrayContaining([
+        expect.objectContaining({
+          role: "system",
+          content: expect.stringContaining("AIアシスタント"),
+        }),
+      ]),
     );
   });
 });
@@ -242,7 +279,6 @@ describe("AIService chat boundary 2000 chars", () => {
     const exactResponse = "a".repeat(2000);
     mockChat.mockResolvedValue({
       response: exactResponse,
-      threadId: "thread-2000",
       usage: null,
     });
     const service = await createService();
@@ -258,7 +294,6 @@ describe("AIService chat boundary 2000 chars", () => {
     const overResponse = "a".repeat(2001);
     mockChat.mockResolvedValue({
       response: overResponse,
-      threadId: "thread-2001",
       usage: null,
     });
     const service = await createService();
@@ -278,7 +313,6 @@ describe("AIService chat long response", () => {
     const longResponse = "a".repeat(3000);
     mockChat.mockResolvedValue({
       response: longResponse,
-      threadId: "thread-long",
       usage: null,
     });
     mockRedisSet.mockResolvedValue(undefined);
@@ -301,10 +335,10 @@ describe("AIService resetConversation", () => {
     mockRedisDelete.mockResolvedValue(undefined);
   });
 
-  it("deletes thread mapping from Redis", async () => {
+  it("deletes messages key from Redis", async () => {
     const service = await createService();
     await service.resetConversation("channel-5");
-    expect(mockRedisDelete).toHaveBeenCalledWith("thread:channel-5");
+    expect(mockRedisDelete).toHaveBeenCalledWith("messages:channel-5");
   });
 
   it("propagates error when redis.delete fails", async () => {
@@ -316,51 +350,56 @@ describe("AIService resetConversation", () => {
   });
 });
 
-describe("AIService chat empty thread ID from Redis", () => {
+describe("AIService chat empty history from Redis", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     mockRedisGet.mockResolvedValue("");
     mockChat.mockResolvedValue({
-      response: "New thread response",
-      threadId: "thread-new",
+      response: "New response",
       usage: null,
     });
     mockRedisSet.mockResolvedValue(undefined);
   });
 
-  it("starts new thread when Redis returns empty string", async () => {
+  it("starts fresh when Redis returns empty string", async () => {
     const service = await createService();
     await service.chat("channel-empty", "Hello");
     expect(mockChat).toHaveBeenCalledWith(
-      "",
-      expect.stringContaining("AIアシスタント"),
+      expect.arrayContaining([
+        expect.objectContaining({
+          role: "system",
+          content: expect.stringContaining("AIアシスタント"),
+        }),
+        expect.objectContaining({ role: "user", content: "Hello" }),
+      ]),
     );
   });
 });
 
-describe("AIService linkThreadChannel", () => {
+describe("AIService linkThreadChannel success", () => {
   beforeEach(() => {
     vi.clearAllMocks();
   });
 
-  it("copies thread mapping to thread channel with TTL", async () => {
-    mockRedisGet.mockResolvedValue("thread-abc");
+  it("copies message history to thread channel with TTL", async () => {
+    const history = JSON.stringify([
+      { role: "system", content: "You are helpful" },
+      { role: "user", content: "Hello" },
+      { role: "assistant", content: "Hi" },
+    ]);
+    mockRedisGet.mockResolvedValue(history);
     mockRedisSet.mockResolvedValue(undefined);
     const service = await createService();
 
     await service.linkThreadChannel("channel-orig", "thread-ch");
 
-    expect(mockRedisGet).toHaveBeenCalledWith("thread:channel-orig");
-    expect(mockRedisSet).toHaveBeenCalledWith(
-      "thread:thread-ch",
-      "thread-abc",
-      {
-        ttlMs: 86400000,
-      },
-    );
+    expect(mockRedisGet).toHaveBeenCalledWith("messages:channel-orig");
+    expect(mockRedisSet).toHaveBeenCalledWith("messages:thread-ch", history, {
+      ttlMs: 86400000,
+    });
   });
 
-  it("does not call redis.set when original channel has no thread mapping", async () => {
+  it("does not call redis.set when original channel has no history", async () => {
     mockRedisGet.mockResolvedValue(null);
     const service = await createService();
 
@@ -369,13 +408,19 @@ describe("AIService linkThreadChannel", () => {
     expect(mockRedisSet).not.toHaveBeenCalled();
   });
 
-  it("does not call redis.set when thread ID is empty string", async () => {
+  it("does not call redis.set when history is empty string", async () => {
     mockRedisGet.mockResolvedValue("");
     const service = await createService();
 
     await service.linkThreadChannel("channel-orig", "thread-ch");
 
     expect(mockRedisSet).not.toHaveBeenCalled();
+  });
+});
+
+describe("AIService linkThreadChannel error", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
   });
 
   it("propagates error when redis.get fails", async () => {
@@ -388,12 +433,102 @@ describe("AIService linkThreadChannel", () => {
   });
 
   it("propagates error when redis.set fails", async () => {
-    mockRedisGet.mockResolvedValue("thread-abc");
+    mockRedisGet.mockResolvedValue(
+      JSON.stringify([{ role: "system", content: "test" }]),
+    );
     mockRedisSet.mockRejectedValue(new Error("write error"));
     const service = await createService();
 
     await expect(
       service.linkThreadChannel("channel-orig", "thread-ch"),
     ).rejects.toThrow("write error");
+  });
+});
+
+describe("AIService chat message truncation at MAX_MESSAGES", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  function buildHistory(messageCount: number): string {
+    const messages: Array<{ role: string; content: string }> = [
+      { role: "system", content: "System prompt" },
+    ];
+    for (let i = 1; i < messageCount; i++) {
+      messages.push({
+        role: i % 2 === 1 ? "user" : "assistant",
+        content: `Message ${i}`,
+      });
+    }
+    return JSON.stringify(messages);
+  }
+
+  it("truncates old messages when history exceeds 50", async () => {
+    mockRedisGet.mockResolvedValue(buildHistory(51));
+    mockChat.mockResolvedValue({ response: "Truncated", usage: null });
+    mockRedisSet.mockResolvedValue(undefined);
+
+    const service = await createService();
+    await service.chat("channel-trunc", "New message");
+
+    const saved = JSON.parse(mockRedisSet.mock.calls[0][1] as string) as Array<{
+      role: string;
+      content: string;
+    }>;
+    // 50 (truncated) + 1 (assistant response) = 51 saved
+    expect(saved).toHaveLength(51);
+    expect(saved[0].role).toBe("system");
+    // Early messages removed: Message 1 & 2 truncated, Message 3 is now index 1
+    expect(saved[1].content).toBe("Message 3");
+    expect(saved[49].role).toBe("user");
+    expect(saved[49].content).toBe("New message");
+    expect(saved[50].role).toBe("assistant");
+    expect(saved[50].content).toBe("Truncated");
+  });
+
+  it("does not truncate when total is exactly 50 before assistant", async () => {
+    mockRedisGet.mockResolvedValue(buildHistory(49));
+    mockChat.mockResolvedValue({ response: "Exact", usage: null });
+    mockRedisSet.mockResolvedValue(undefined);
+
+    const service = await createService();
+    await service.chat("channel-exact", "New message");
+
+    const saved = JSON.parse(mockRedisSet.mock.calls[0][1] as string) as Array<{
+      role: string;
+      content: string;
+    }>;
+    // 49 (from Redis) + 1 (user) + 1 (assistant) = 51, no truncation
+    expect(saved).toHaveLength(51);
+    expect(saved[1].content).toBe("Message 1");
+    expect(saved[49].content).toBe("New message");
+    expect(saved[50].content).toBe("Exact");
+  });
+});
+
+describe("AIService chat invalid JSON in Redis", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mockRedisGet.mockResolvedValue("invalid json{");
+    mockChat.mockResolvedValue({
+      response: "Fallback response",
+      usage: null,
+    });
+    mockRedisSet.mockResolvedValue(undefined);
+  });
+
+  it("falls back to system prompt when stored JSON is invalid", async () => {
+    const service = await createService();
+    await service.chat("channel-bad-json", "Hello");
+
+    expect(mockChat).toHaveBeenCalledWith(
+      expect.arrayContaining([
+        expect.objectContaining({
+          role: "system",
+          content: expect.stringContaining("AIアシスタント"),
+        }),
+        expect.objectContaining({ role: "user", content: "Hello" }),
+      ]),
+    );
   });
 });
